@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from tensorflow_examples.models.pix2pix import pix2pix
+from model import generator, discriminator
 
 import os
 import time
@@ -163,12 +163,21 @@ if __name__ == '__main__':
             preprocess_image_test, num_parallel_calls=AUTOTUNE).take(MAX_NUM_SAMPLES).cache().shuffle(BUFFER_SIZE).batch(1)
 
 
-    generator_g = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
-    generator_f = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
-    
-    discriminator_x = pix2pix.discriminator(norm_type='instancenorm', target=False)
-    discriminator_y = pix2pix.discriminator(norm_type='instancenorm', target=False)
+    #generator_g = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
+    #generator_f = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
+    generator_g = generator()
+    generator_f = generator()
 
+    #discriminator_x = pix2pix.discriminator(norm_type='instancenorm', target=False)
+    #discriminator_y = pix2pix.discriminator(norm_type='instancenorm', target=False)
+    discriminator_y = discriminator()
+    discriminator_x = discriminator()
+
+    print('Generator:')
+    print(generator_g.summary())
+    print('Discriminator:')
+    print(discriminator_x.summary())
+    
     generator_g_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     generator_f_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     
