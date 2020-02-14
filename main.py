@@ -6,6 +6,7 @@ from tensorflow_examples.models.pix2pix import pix2pix
 
 import os
 import time
+import datetime
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
@@ -22,6 +23,7 @@ IMG_HEIGHT = 256
 LAMBDA = 10
 
 loss_obj = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
 
 def random_crop(image):
   cropped_image = tf.image.random_crop(
@@ -112,6 +114,8 @@ def train_step(real_x, real_y):
     total_gen_g_loss = gen_g_loss + total_cycle_loss + identity_loss(real_y, same_y)
     total_gen_f_loss = gen_f_loss + total_cycle_loss + identity_loss(real_x, same_x)
 
+    train_loss(total_gen_g_loss)
+
     disc_x_loss = discriminator_loss(disc_real_x, disc_fake_x)
     disc_y_loss = discriminator_loss(disc_real_y, disc_fake_y)
   
@@ -187,6 +191,10 @@ if __name__ == '__main__':
       ckpt.restore(ckpt_manager.latest_checkpoint)
       print ('Latest checkpoint restored!!')
 
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    train_log_dir = 'logs/gradient_tape/' + current_time + '/train'
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+
     for epoch in range(EPOCHS):
       start = time.time()
     
@@ -196,11 +204,21 @@ if __name__ == '__main__':
         if n % 10 == 0:
           print ('.', end='')
         n+=1
+      
+      fake_y = generator_g(image_x)
+      fake_x = generator_f(image_y)
+      with train_summary_writer.as_default():
+          tf.summary.scalar('loss', train_loss.result(), step=epoch)
+          tf.summary.image("Input X", image_x, step=0)
+          tf.summary.image("Faked Y", fake_y, step=0)
+          tf.summary.image("Input Y", image_y, step=0)
+          tf.summary.image("Faked X", fake_x, step=0)
     
       if (epoch + 1) % 5 == 0:
         ckpt_save_path = ckpt_manager.save()
         print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
                                                              ckpt_save_path))
     
+      train_loss.reset_states()
       print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
                                                           time.time()-start))
