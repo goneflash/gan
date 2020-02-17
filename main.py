@@ -4,10 +4,15 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 from model import generator, discriminator
 
+import argparse
 import os
 import time
+import sys
+import getopt
 import datetime
 import json
+import numpy as np
+from PIL import Image
 import csv
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
@@ -239,7 +244,22 @@ def get_horse_zebra_dataset():
 
 
 if __name__ == '__main__':
-    print('Start')
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], '', ['mode='])
+    except getopt.GetoptError:
+        print('Usage: main.py --mode=<mode>')
+        sys.exit(2)
+
+    checkpoint_path = "./checkpoints/train"
+    mode = 'train'
+
+    for opt, arg in opts:
+        if opt in ("-m", "--mode"):
+            mode = arg
+            if mode not in ['train', 'predict']:
+                print('Wrong mode: {}'.format(mode))
+                exit()
+    print('{} mode'.format(mode))
     
     train_horses, train_zebras = get_horse_zebra_dataset()
     #train_horses, train_zebras = get_male_female_dataset()
@@ -259,12 +279,11 @@ if __name__ == '__main__':
     print('Discriminator:')
     print(discriminator_x.summary())
     
-    generator_g_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-    generator_f_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+    generator_g_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
+    generator_f_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
     
-    discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-    discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-    checkpoint_path = "./checkpoints/train"
+    discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
+    discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
 
     ckpt = tf.train.Checkpoint(generator_g=generator_g,
                                generator_f=generator_f,
@@ -274,63 +293,80 @@ if __name__ == '__main__':
                                generator_f_optimizer=generator_f_optimizer,
                                discriminator_x_optimizer=discriminator_x_optimizer,
                                discriminator_y_optimizer=discriminator_y_optimizer)
-    
-    ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
-    loss_obj = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-    generator_f_train_loss = tf.keras.metrics.Mean('generator_f_train_loss', dtype=tf.float32)
-    generator_g_train_loss = tf.keras.metrics.Mean('generator_g_train_loss', dtype=tf.float32)
-    discriminator_y_train_loss = tf.keras.metrics.Mean('discriminator_y_train_loss', dtype=tf.float32)
-    discriminator_x_train_loss = tf.keras.metrics.Mean('discriminator_x_train_loss', dtype=tf.float32)
 
+    if mode == 'train':
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        # if a checkpoint exists, restore the latest checkpoint.
+        if ckpt_manager.latest_checkpoint:
+          ckpt.restore(ckpt_manager.latest_checkpoint)
+          print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
     
-    # if a checkpoint exists, restore the latest checkpoint.
-    if ckpt_manager.latest_checkpoint:
-      ckpt.restore(ckpt_manager.latest_checkpoint)
-      print ('Latest checkpoint restored!!')
+        loss_obj = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        generator_f_train_loss = tf.keras.metrics.Mean('generator_f_train_loss', dtype=tf.float32)
+        generator_g_train_loss = tf.keras.metrics.Mean('generator_g_train_loss', dtype=tf.float32)
+        discriminator_y_train_loss = tf.keras.metrics.Mean('discriminator_y_train_loss', dtype=tf.float32)
+        discriminator_x_train_loss = tf.keras.metrics.Mean('discriminator_x_train_loss', dtype=tf.float32)
+    
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        generator_f_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_f_train'
+        generator_g_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_train'
+        generator_f_train_summary_writer = tf.summary.create_file_writer(generator_f_train_log_dir)
+        generator_g_train_summary_writer = tf.summary.create_file_writer(generator_g_train_log_dir)
+        discriminator_y_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_y_train'
+        discriminator_x_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_train'
+        discriminator_y_train_summary_writer = tf.summary.create_file_writer(discriminator_y_train_log_dir)
+        discriminator_x_train_summary_writer = tf.summary.create_file_writer(discriminator_x_train_log_dir)
+    
+        for epoch in range(EPOCHS):
+          start = time.time()
+        
+          for image_x, image_y in tf.data.Dataset.zip((train_horses, train_zebras)):
+            train_step(image_x, image_y)
+          
+          fake_y = generator_g(image_x)
+          fake_x = generator_f(image_y)
+          with generator_f_train_summary_writer.as_default():
+              tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
+              tf.summary.image("Input X", image_x, step=epoch)
+              tf.summary.image("Faked Y", fake_y, step=epoch)
+          with generator_g_train_summary_writer.as_default():
+              tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
+              tf.summary.image("Input Y", image_y, step=epoch)
+              tf.summary.image("Faked X", fake_x, step=epoch)
+          with discriminator_y_train_summary_writer.as_default():
+              tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
+          with discriminator_x_train_summary_writer.as_default():
+              tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
+        
+          if (epoch + 1) % 20 == 0:
+            ckpt_save_path = ckpt_manager.save()
+            print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
+                                                                 ckpt_save_path))
+        
+          generator_f_train_loss.reset_states()
+          generator_g_train_loss.reset_states()
+          discriminator_y_train_loss.reset_states()
+          discriminator_x_train_loss.reset_states()
+          print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
+                                                              time.time()-start))
+    elif mode == 'predict':
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        if not ckpt_manager.latest_checkpoint:
+            print('Error: ckpt not exist for predict')
+            exit()
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    generator_f_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_f_train'
-    generator_g_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_train'
-    generator_f_train_summary_writer = tf.summary.create_file_writer(generator_f_train_log_dir)
-    generator_g_train_summary_writer = tf.summary.create_file_writer(generator_g_train_log_dir)
-    discriminator_y_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_y_train'
-    discriminator_x_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_train'
-    discriminator_y_train_summary_writer = tf.summary.create_file_writer(discriminator_y_train_log_dir)
-    discriminator_x_train_summary_writer = tf.summary.create_file_writer(discriminator_x_train_log_dir)
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
 
-    for epoch in range(EPOCHS):
-      start = time.time()
-    
-      n = 0
-      for image_x, image_y in tf.data.Dataset.zip((train_horses, train_zebras)):
-        train_step(image_x, image_y)
-        if n % 10 == 0:
-          print ('.', end='')
-        n+=1
-      
-      fake_y = generator_g(image_x)
-      fake_x = generator_f(image_y)
-      with generator_f_train_summary_writer.as_default():
-          tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
-          tf.summary.image("Input X", image_x, step=epoch)
-          tf.summary.image("Faked Y", fake_y, step=epoch)
-      with generator_g_train_summary_writer.as_default():
-          tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
-          tf.summary.image("Input Y", image_y, step=epoch)
-          tf.summary.image("Faked X", fake_x, step=epoch)
-      with discriminator_y_train_summary_writer.as_default():
-          tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
-      with discriminator_x_train_summary_writer.as_default():
-          tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
-    
-      if (epoch + 1) % 20 == 0:
-        ckpt_save_path = ckpt_manager.save()
-        print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                             ckpt_save_path))
-    
-      generator_f_train_loss.reset_states()
-      generator_g_train_loss.reset_states()
-      discriminator_y_train_loss.reset_states()
-      discriminator_x_train_loss.reset_states()
-      print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
-                                                          time.time()-start))
+        for index, horse in enumerate(train_horses.take(50)):
+            fake_zebra = generator_g(horse)
+            image = np.concatenate((horse[0].numpy(), fake_zebra[0].numpy()), axis=1)
+            image = ((image + 1.0) * 127.5).astype(np.uint8)
+
+            pil_img = Image.fromarray(image)
+
+            file_name = os.path.join('./', 'output', 'fake_zebra' + str(index) + '.png')
+            pil_img.save(file_name)
+
+    else:
+        print('Error: Unknown mode {}'.format(mode))
