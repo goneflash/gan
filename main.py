@@ -7,6 +7,8 @@ from model import generator, discriminator
 import os
 import time
 import datetime
+import json
+import csv
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
@@ -16,8 +18,8 @@ AUTOTUNE = tf.data.experimental.AUTOTUNE
 EPOCHS = 40
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
-BATCH_SIZE = 1
-MAX_NUM_SAMPLES = 10
+BATCH_SIZE = 2
+MAX_NUM_SAMPLES = 5000
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
 LAMBDA = 10
@@ -117,8 +119,8 @@ def train_step(real_x, real_y):
     disc_x_loss = discriminator_loss(disc_real_x, disc_fake_x)
     disc_y_loss = discriminator_loss(disc_real_y, disc_fake_y)
 
-    discriminator_g_train_loss(total_gen_g_loss)
-    discriminator_f_train_loss(total_gen_f_loss)
+    discriminator_x_train_loss(disc_x_loss)
+    discriminator_y_train_loss(disc_y_loss)
   
   # Calculate the gradients for generator and discriminator
   generator_g_gradients = tape.gradient(total_gen_g_loss, 
@@ -144,8 +146,79 @@ def train_step(real_x, real_y):
   discriminator_y_optimizer.apply_gradients(zip(discriminator_y_gradients,
                                                 discriminator_y.trainable_variables))
 
-if __name__ == '__main__':
-    print('Start')
+def decode_img(img):
+  # convert the compressed string to a 3D uint8 tensor
+  img = tf.image.decode_jpeg(img, channels=3)
+  # Use `convert_image_dtype` to convert to floats in the [0,1] range.
+  img = tf.image.convert_image_dtype(img, tf.float32)
+  # resize the image to the desired size.
+  return tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT])
+
+def process_path(image_name):
+  file_path = '/home/fan/dataset/celeb_img_align/img_align_celeba/' + image_name
+  # load the raw data from the file as a string
+  img = tf.io.read_file(file_path)
+  img = decode_img(img)
+  return img
+
+def get_male_female_dataset():
+    male_images = []
+    female_images = []
+    # 21 for male, 16 for glass
+    classifier_index = 21
+    
+    with open('/home/fan/dataset/celeb_img_align/list_attr_celeba.txt', 'r') as f:
+      csv_input = csv.reader(f, delimiter=' ')
+      all_attrs = {}
+      attr_names = None
+      for col in csv_input:
+        if attr_names is None:
+          attr_names = []
+          for attr_name in col:
+            if len(attr_name) != 0:
+              attr_names.append(attr_name)
+          continue
+
+        attrs = {}
+        image_name = None
+        valid_entry_count = 0
+        for entry in col:
+          if len(entry) != 0:
+            if image_name is None:
+              image_name = entry
+              continue
+            attrs[attr_names[valid_entry_count]] = entry
+            valid_entry_count += 1
+
+        all_attrs[image_name] = attrs
+
+    for image_name in all_attrs:
+      example = all_attrs[image_name]
+      if example['Male'] == '1':
+        male_images.append(image_name)
+      elif example['Male'] == '-1':
+        female_images.append(image_name)
+    
+    print(attr_names)
+    print(len(all_attrs))
+    print(len(male_images))
+    print(len(female_images))
+
+    print('Male examples: {}'.format(male_images[0:20]))
+    print('Female examples: {}'.format(female_images[0:20]))
+
+    male_ds = tf.data.Dataset.from_tensor_slices(male_images[0:MAX_NUM_SAMPLES])
+    female_ds = tf.data.Dataset.from_tensor_slices(female_images[0:MAX_NUM_SAMPLES])
+    #male_ds = male_ds.map(process_path, num_parallel_calls=AUTOTUNE).cache().shuffle(BUFFER_SIZE).batch(1)
+    #female_ds = female_ds.map(process_path, num_parallel_calls=AUTOTUNE).cache().shuffle(BUFFER_SIZE).batch(1)
+
+    male_ds = male_ds.map(process_path, num_parallel_calls=AUTOTUNE).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+    female_ds = female_ds.map(process_path, num_parallel_calls=AUTOTUNE).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+    return male_ds, female_ds
+
+
+def get_horse_zebra_dataset():
     dataset, metadata = tfds.load('cycle_gan/horse2zebra',
                               with_info=True, as_supervised=True)
     train_horses, train_zebras = dataset['trainA'], dataset['trainB']
@@ -162,6 +235,14 @@ if __name__ == '__main__':
     test_zebras = test_zebras.map(
             preprocess_image_test, num_parallel_calls=AUTOTUNE).take(MAX_NUM_SAMPLES).cache().shuffle(BUFFER_SIZE).batch(1)
 
+    return train_horses, train_zebras
+
+
+if __name__ == '__main__':
+    print('Start')
+    
+    train_horses, train_zebras = get_horse_zebra_dataset()
+    #train_horses, train_zebras = get_male_female_dataset()
 
     #generator_g = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
     #generator_f = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
@@ -198,8 +279,8 @@ if __name__ == '__main__':
     loss_obj = tf.keras.losses.BinaryCrossentropy(from_logits=True)
     generator_f_train_loss = tf.keras.metrics.Mean('generator_f_train_loss', dtype=tf.float32)
     generator_g_train_loss = tf.keras.metrics.Mean('generator_g_train_loss', dtype=tf.float32)
-    discriminator_f_train_loss = tf.keras.metrics.Mean('discriminator_f_train_loss', dtype=tf.float32)
-    discriminator_g_train_loss = tf.keras.metrics.Mean('discriminator_g_train_loss', dtype=tf.float32)
+    discriminator_y_train_loss = tf.keras.metrics.Mean('discriminator_y_train_loss', dtype=tf.float32)
+    discriminator_x_train_loss = tf.keras.metrics.Mean('discriminator_x_train_loss', dtype=tf.float32)
 
     
     # if a checkpoint exists, restore the latest checkpoint.
@@ -212,10 +293,10 @@ if __name__ == '__main__':
     generator_g_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_train'
     generator_f_train_summary_writer = tf.summary.create_file_writer(generator_f_train_log_dir)
     generator_g_train_summary_writer = tf.summary.create_file_writer(generator_g_train_log_dir)
-    discriminator_f_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_f_train'
-    discriminator_g_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_g_train'
-    discriminator_f_train_summary_writer = tf.summary.create_file_writer(discriminator_f_train_log_dir)
-    discriminator_g_train_summary_writer = tf.summary.create_file_writer(discriminator_g_train_log_dir)
+    discriminator_y_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_y_train'
+    discriminator_x_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_train'
+    discriminator_y_train_summary_writer = tf.summary.create_file_writer(discriminator_y_train_log_dir)
+    discriminator_x_train_summary_writer = tf.summary.create_file_writer(discriminator_x_train_log_dir)
 
     for epoch in range(EPOCHS):
       start = time.time()
@@ -231,25 +312,25 @@ if __name__ == '__main__':
       fake_x = generator_f(image_y)
       with generator_f_train_summary_writer.as_default():
           tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
+          tf.summary.image("Input X", image_x, step=epoch)
+          tf.summary.image("Faked Y", fake_y, step=epoch)
       with generator_g_train_summary_writer.as_default():
           tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
-      with discriminator_f_train_summary_writer.as_default():
-          tf.summary.scalar('discriminator_loss', discriminator_f_train_loss.result(), step=epoch)
-      with discriminator_g_train_summary_writer.as_default():
-          tf.summary.scalar('discriminator_loss', discriminator_g_train_loss.result(), step=epoch)
-          #tf.summary.image("Input X", image_x, step=0)
-          #tf.summary.image("Faked Y", fake_y, step=0)
-          #tf.summary.image("Input Y", image_y, step=0)
-          #tf.summary.image("Faked X", fake_x, step=0)
+          tf.summary.image("Input Y", image_y, step=epoch)
+          tf.summary.image("Faked X", fake_x, step=epoch)
+      with discriminator_y_train_summary_writer.as_default():
+          tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
+      with discriminator_x_train_summary_writer.as_default():
+          tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
     
-      if (epoch + 1) % 5 == 0:
+      if (epoch + 1) % 20 == 0:
         ckpt_save_path = ckpt_manager.save()
         print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
                                                              ckpt_save_path))
     
       generator_f_train_loss.reset_states()
       generator_g_train_loss.reset_states()
-      discriminator_f_train_loss.reset_states()
-      discriminator_g_train_loss.reset_states()
+      discriminator_y_train_loss.reset_states()
+      discriminator_x_train_loss.reset_states()
       print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
                                                           time.time()-start))
