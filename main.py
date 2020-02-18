@@ -372,7 +372,7 @@ if __name__ == '__main__':
             pil_img.save(file_name)
 
         for index, zebra in enumerate(train_zebras.take(50)):
-            fake_horse = generator_g(zebra)
+            fake_horse = generator_f(zebra)
             image = np.concatenate((zebra[0].numpy(), fake_horse[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
 
