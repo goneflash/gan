@@ -20,11 +20,11 @@ from IPython.display import clear_output
 tfds.disable_progress_bar()
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
-EPOCHS = 40
+EPOCHS = 100
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
-BATCH_SIZE = 2
-MAX_NUM_SAMPLES = 5000
+BATCH_SIZE = 1
+MAX_NUM_SAMPLES = 10000
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
 LAMBDA = 10
@@ -156,6 +156,8 @@ def decode_img(img):
   img = tf.image.decode_jpeg(img, channels=3)
   # Use `convert_image_dtype` to convert to floats in the [0,1] range.
   img = tf.image.convert_image_dtype(img, tf.float32)
+  # [-1, 1]
+  img = (img - 0.5) / 0.5
   # resize the image to the desired size.
   return tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT])
 
@@ -164,6 +166,7 @@ def process_path(image_name):
   # load the raw data from the file as a string
   img = tf.io.read_file(file_path)
   img = decode_img(img)
+
   return img
 
 def get_male_female_dataset():
@@ -261,8 +264,8 @@ if __name__ == '__main__':
                 exit()
     print('{} mode'.format(mode))
     
-    train_horses, train_zebras = get_horse_zebra_dataset()
-    #train_horses, train_zebras = get_male_female_dataset()
+    #train_horses, train_zebras = get_horse_zebra_dataset()
+    train_horses, train_zebras = get_male_female_dataset()
 
     #generator_g = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
     #generator_f = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
@@ -279,11 +282,11 @@ if __name__ == '__main__':
     print('Discriminator:')
     print(discriminator_x.summary())
     
-    generator_g_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
-    generator_f_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
+    generator_g_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+    generator_f_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     
-    discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
-    discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-3, beta_1=0.5)
+    discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+    discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
     ckpt = tf.train.Checkpoint(generator_g=generator_g,
                                generator_f=generator_f,
@@ -366,6 +369,16 @@ if __name__ == '__main__':
             pil_img = Image.fromarray(image)
 
             file_name = os.path.join('./', 'output', 'fake_zebra' + str(index) + '.png')
+            pil_img.save(file_name)
+
+        for index, zebra in enumerate(train_zebras.take(50)):
+            fake_horse = generator_g(zebra)
+            image = np.concatenate((zebra[0].numpy(), fake_horse[0].numpy()), axis=1)
+            image = ((image + 1.0) * 127.5).astype(np.uint8)
+
+            pil_img = Image.fromarray(image)
+
+            file_name = os.path.join('./', 'output', 'fake_horse' + str(index) + '.png')
             pil_img.save(file_name)
 
     else:

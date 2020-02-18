@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow_examples.models.pix2pix import pix2pix
 
 OUTPUT_CHANNELS = 3
-BASE_CHANNEL = 8 
+BASE_CHANNEL = 16 
 
 def generator():
     return unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
