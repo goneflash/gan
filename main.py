@@ -202,15 +202,16 @@ def get_male_female_dataset():
 
     for image_name in all_attrs:
       example = all_attrs[image_name]
-      if example['Male'] == '1':
+      if example['Male'] == '1' and example['Blurry'] == '-1' and example['Wearing_Hat'] == '-1':
+        #(example['Goatee'] == '1' or example['Mustache'] == '1' or example['No_Beard'] == '-1' or example['5_o_Clock_Shadow'] == '1'):
         male_images.append(image_name)
-      elif example['Male'] == '-1':
+      elif example['Male'] == '-1' and example['Blurry'] == '-1' and example['Wearing_Hat'] == '-1' and example['Wearing_Lipstick'] == '1':
         female_images.append(image_name)
     
     print(attr_names)
     print(len(all_attrs))
-    print(len(male_images))
-    print(len(female_images))
+    print('Available male size {}'.format(len(male_images)))
+    print('Available female size {}'.format(len(female_images)))
 
     print('Male examples: {}'.format(male_images[0:20]))
     print('Female examples: {}'.format(female_images[0:20]))
