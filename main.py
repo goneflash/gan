@@ -1,3 +1,6 @@
+# Usage: python main.py --mode=predict --ckpt_path=./checkpoints/saved_ckpt
+#        python main.py --mode=train
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import tensorflow as tf
@@ -249,7 +252,7 @@ def get_horse_zebra_dataset():
 
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], '', ['mode='])
+        opts, args = getopt.getopt(sys.argv[1:], '', ['mode=', 'ckpt_path='])
     except getopt.GetoptError:
         print('Usage: main.py --mode=<mode>')
         sys.exit(2)
@@ -263,18 +266,15 @@ if __name__ == '__main__':
             if mode not in ['train', 'predict']:
                 print('Wrong mode: {}'.format(mode))
                 exit()
+        if opt == '--ckpt_path':
+            checkpoint_path = arg
     print('{} mode'.format(mode))
     
     #train_horses, train_zebras = get_horse_zebra_dataset()
     train_horses, train_zebras = get_male_female_dataset()
 
-    #generator_g = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
-    #generator_f = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
     generator_g = generator()
     generator_f = generator()
-
-    #discriminator_x = pix2pix.discriminator(norm_type='instancenorm', target=False)
-    #discriminator_y = pix2pix.discriminator(norm_type='instancenorm', target=False)
     discriminator_y = discriminator()
     discriminator_x = discriminator()
 
