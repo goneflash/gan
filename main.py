@@ -28,6 +28,7 @@ OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 1
 MAX_NUM_SAMPLES = 10000
+NUM_SAMPLES_FOR_PREDICT=10
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
 LAMBDA = 10
@@ -362,7 +363,7 @@ if __name__ == '__main__':
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
 
-        for index, horse in enumerate(train_horses.take(50)):
+        for index, horse in enumerate(train_horses.take(NUM_SAMPLES_FOR_PREDICT)):
             fake_zebra = generator_g(horse)
             image = np.concatenate((horse[0].numpy(), fake_zebra[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
@@ -372,7 +373,7 @@ if __name__ == '__main__':
             file_name = os.path.join('./', 'output', 'fake_zebra' + str(index) + '.png')
             pil_img.save(file_name)
 
-        for index, zebra in enumerate(train_zebras.take(50)):
+        for index, zebra in enumerate(train_zebras.take(NUM_SAMPLES_FOR_PREDICT)):
             fake_horse = generator_f(zebra)
             image = np.concatenate((zebra[0].numpy(), fake_horse[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
@@ -381,6 +382,18 @@ if __name__ == '__main__':
 
             file_name = os.path.join('./', 'output', 'fake_horse' + str(index) + '.png')
             pil_img.save(file_name)
+        
+        generator_f.save('./saved_model/generator_f') 
+        generator_g.save('./saved_model/generator_g') 
+        discriminator_x.save('./saved_model/discriminator_x') 
+        discriminator_y.save('./saved_model/discriminator_y') 
+        generator_f.summary()
+
+        # Load model not working yet.
+        #new_model = tf.keras.models.load_model('saved_model/generator_g')
+        #batch_input_shape = (None, 256, 256, 3)
+        #input_2.build(batch_input_shape)
+        #new_model.summary()
 
     else:
         print('Error: Unknown mode {}'.format(mode))
