@@ -262,7 +262,10 @@ if __name__ == '__main__':
         
           for image_x in train_horses:
             distill_step(image_x)
-          print('Epoch {}'.format(epoch))
+          if (epoch + 1) % 20 == 0:
+            distill_ckpt_save_path = distill_ckpt_manager.save()
+            print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
+                                                                 distill_ckpt_save_path))
 
           big_model_output = generator_g(image_x)
           tiny_model_output = tiny_generator(image_x)
@@ -273,6 +276,7 @@ if __name__ == '__main__':
               tf.summary.image("tiny_model_output", tiny_model_output, step=epoch)
 
           tiny_generator_train_loss.reset_states()
+        tiny_generator.save('./saved_model/tiny_generator') 
 
     elif mode == 'predict':
         ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
