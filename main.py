@@ -1,5 +1,6 @@
 # Usage: python main.py --mode=predict --ckpt_path=./checkpoints/saved_ckpt
 #        python main.py --mode=train
+#        python main.py --mode=distill --ckpt_path=./checkpoints/saved_ckpt
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -25,7 +26,7 @@ OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 1
 MAX_NUM_SAMPLES = 10
-NUM_SAMPLES_FOR_PREDICT=10
+NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
 
 
@@ -277,6 +278,20 @@ if __name__ == '__main__':
 
           tiny_generator_train_loss.reset_states()
         tiny_generator.save('./saved_model/tiny_generator') 
+
+        # Also make some predictions
+        for index, horse in enumerate(train_horses.take(NUM_SAMPLES_FOR_PREDICT)):
+            big_model_output = generator_g(horse)
+            tiny_model_output = tiny_generator(horse)
+
+            image = np.concatenate((horse[0].numpy(), big_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
+            image = ((image + 1.0) * 127.5).astype(np.uint8)
+
+            pil_img = Image.fromarray(image)
+
+            file_name = os.path.join('./', 'output_tiny', 'tiny_compare' + str(index) + '.png')
+            pil_img.save(file_name)
+
 
     elif mode == 'predict':
         ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
