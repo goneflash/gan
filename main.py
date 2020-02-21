@@ -51,6 +51,19 @@ def identity_loss(real_image, same_image):
   return LAMBDA * 0.5 * loss
 
 @tf.function
+def distill_step(input_image):
+    with tf.GradientTape(persistent=True) as tape:
+        original_output = generator_g(input_image, training=False)
+        tiny_output = tiny_generator(input_image, training=True)
+        simulate_loss = identity_loss(original_output, tiny_output)
+
+        tiny_generator_train_loss(simulate_loss)
+
+    tiny_generator_gradients = tape.gradient(simulate_loss, tiny_generator.trainable_variables)
+    distill_optimizer.apply_gradients(zip(tiny_generator_gradients, tiny_generator.trainable_variables))
+
+
+@tf.function
 def train_step(real_x, real_y):
   # persistent is set to True because the tape is used more than
   # once to calculate the gradients.
@@ -131,7 +144,7 @@ if __name__ == '__main__':
     for opt, arg in opts:
         if opt in ("-m", "--mode"):
             mode = arg
-            if mode not in ['train', 'predict']:
+            if mode not in ['train', 'predict', 'distill']:
                 print('Wrong mode: {}'.format(mode))
                 exit()
         if opt == '--ckpt_path':
@@ -221,6 +234,46 @@ if __name__ == '__main__':
           discriminator_x_train_loss.reset_states()
           print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
                                                               time.time()-start))
+    elif mode == 'distill':
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        if not ckpt_manager.latest_checkpoint:
+            print('Error: ckpt not exist for predict')
+            exit()
+
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
+
+        tiny_generator = generator(4)
+        tiny_generator.summary()
+        distill_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+        distill_ckpt = tf.train.Checkpoint(
+                tiny_generator=tiny_generator,
+                distill_optimizer=distill_optimizer)
+        distill_ckpt_path = './checkpoints_distill'
+        distill_ckpt_manager = tf.train.CheckpointManager(distill_ckpt, distill_ckpt_path, max_to_keep=5)
+
+        tiny_generator_train_loss = tf.keras.metrics.Mean('tiny_generator_train_loss', dtype=tf.float32)
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        tiny_generator_train_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_train'
+        tiny_generator_train_summary_writer = tf.summary.create_file_writer(tiny_generator_train_log_dir)
+
+        for epoch in range(EPOCHS):
+          start = time.time()
+        
+          for image_x in train_horses:
+            distill_step(image_x)
+          print('Epoch {}'.format(epoch))
+
+          big_model_output = generator_g(image_x)
+          tiny_model_output = tiny_generator(image_x)
+          with tiny_generator_train_summary_writer.as_default():
+              tf.summary.scalar('tiny_generator_loss', tiny_generator_train_loss.result(), step=epoch)
+              tf.summary.image("input X", image_x, step=epoch)
+              tf.summary.image("big output X", big_model_output, step=epoch)
+              tf.summary.image("tiny_model_output", tiny_model_output, step=epoch)
+
+          tiny_generator_train_loss.reset_states()
+
     elif mode == 'predict':
         ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
         if not ckpt_manager.latest_checkpoint:

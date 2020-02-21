@@ -6,11 +6,11 @@ from tensorflow_examples.models.pix2pix import pix2pix
 OUTPUT_CHANNELS = 3
 BASE_CHANNEL = 16 
 
-def generator():
-    return unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
+def generator(base_channel=BASE_CHANNEL):
+    return unet_generator(base_channel, OUTPUT_CHANNELS, norm_type='instancenorm')
 
-def discriminator():
-    return my_discriminator(norm_type='instancenorm', target=False)
+def discriminator(base_channel=BASE_CHANNEL):
+    return discriminator_base(base_channel, norm_type='instancenorm', target=False)
 
 class InstanceNormalization(tf.keras.layers.Layer):
   """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
@@ -38,7 +38,7 @@ class InstanceNormalization(tf.keras.layers.Layer):
     normalized = (x - mean) * inv
     return self.scale * normalized + self.offset
 
-def unet_generator(output_channels, norm_type='batchnorm'):
+def unet_generator(base_channel, output_channels, norm_type='batchnorm'):
   """Modified u-net generator model (https://arxiv.org/abs/1611.07004).
   Args:
     output_channels: Output channels
@@ -48,24 +48,24 @@ def unet_generator(output_channels, norm_type='batchnorm'):
   """
 
   down_stack = [
-      pix2pix.downsample(BASE_CHANNEL * 4, 4, norm_type, apply_norm=False),  # (bs, 128, 128, 64)
-      pix2pix.downsample(BASE_CHANNEL * 8, 4, norm_type),  # (bs, 64, 64, 128)
-      pix2pix.downsample(BASE_CHANNEL * 16, 4, norm_type),  # (bs, 32, 32, 256)
-      pix2pix.downsample(BASE_CHANNEL * 32, 4, norm_type),  # (bs, 16, 16, 512)
-      pix2pix.downsample(BASE_CHANNEL * 32, 4, norm_type),  # (bs, 8, 8, 512)
-      pix2pix.downsample(BASE_CHANNEL * 32, 4, norm_type),  # (bs, 4, 4, 512)
-      pix2pix.downsample(BASE_CHANNEL * 32, 4, norm_type),  # (bs, 2, 2, 512)
-      pix2pix.downsample(BASE_CHANNEL * 32, 4, norm_type),  # (bs, 1, 1, 512)
+      pix2pix.downsample(base_channel * 4, 4, norm_type, apply_norm=False),  # (bs, 128, 128, 64)
+      pix2pix.downsample(base_channel * 8, 4, norm_type),  # (bs, 64, 64, 128)
+      pix2pix.downsample(base_channel * 16, 4, norm_type),  # (bs, 32, 32, 256)
+      pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 16, 16, 512)
+      pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 8, 8, 512)
+      pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 4, 4, 512)
+      pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 2, 2, 512)
+      pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 1, 1, 512)
   ]
 
   up_stack = [
-      pix2pix.upsample(BASE_CHANNEL * 32, 4, norm_type, apply_dropout=True),  # (bs, 2, 2, 1024)
-      pix2pix.upsample(BASE_CHANNEL * 32, 4, norm_type, apply_dropout=True),  # (bs, 4, 4, 1024)
-      pix2pix.upsample(BASE_CHANNEL * 32, 4, norm_type, apply_dropout=True),  # (bs, 8, 8, 1024)
-      pix2pix.upsample(BASE_CHANNEL * 32, 4, norm_type),  # (bs, 16, 16, 1024)
-      pix2pix.upsample(BASE_CHANNEL * 16, 4, norm_type),  # (bs, 32, 32, 512)
-      pix2pix.upsample(BASE_CHANNEL * 8, 4, norm_type),  # (bs, 64, 64, 256)
-      pix2pix.upsample(BASE_CHANNEL * 4, 4, norm_type),  # (bs, 128, 128, 128)
+      pix2pix.upsample(base_channel * 32, 4, norm_type, apply_dropout=True),  # (bs, 2, 2, 1024)
+      pix2pix.upsample(base_channel * 32, 4, norm_type, apply_dropout=True),  # (bs, 4, 4, 1024)
+      pix2pix.upsample(base_channel * 32, 4, norm_type, apply_dropout=True),  # (bs, 8, 8, 1024)
+      pix2pix.upsample(base_channel * 32, 4, norm_type),  # (bs, 16, 16, 1024)
+      pix2pix.upsample(base_channel * 16, 4, norm_type),  # (bs, 32, 32, 512)
+      pix2pix.upsample(base_channel * 8, 4, norm_type),  # (bs, 64, 64, 256)
+      pix2pix.upsample(base_channel * 4, 4, norm_type),  # (bs, 128, 128, 128)
   ]
 
   initializer = tf.random_normal_initializer(0., 0.02)
@@ -97,7 +97,7 @@ def unet_generator(output_channels, norm_type='batchnorm'):
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-def my_discriminator(norm_type='batchnorm', target=True):
+def discriminator_base(base_channel, norm_type='batchnorm', target=True):
   """PatchGan discriminator model (https://arxiv.org/abs/1611.07004).
   Args:
     norm_type: Type of normalization. Either 'batchnorm' or 'instancenorm'.
@@ -116,13 +116,13 @@ def my_discriminator(norm_type='batchnorm', target=True):
     x = tf.keras.layers.concatenate([inp, tar])  # (bs, 256, 256, channels*2)
 
 
-  down1 = pix2pix.downsample(BASE_CHANNEL * 4, 4, norm_type, False)(x)  # (bs, 128, 128, 64)
-  down2 = pix2pix.downsample(BASE_CHANNEL * 8, 4, norm_type)(down1)  # (bs, 64, 64, 128)
-  down3 = pix2pix.downsample(BASE_CHANNEL * 16, 4, norm_type)(down2)  # (bs, 32, 32, 256)
+  down1 = pix2pix.downsample(base_channel * 4, 4, norm_type, False)(x)  # (bs, 128, 128, 64)
+  down2 = pix2pix.downsample(base_channel * 8, 4, norm_type)(down1)  # (bs, 64, 64, 128)
+  down3 = pix2pix.downsample(base_channel * 16, 4, norm_type)(down2)  # (bs, 32, 32, 256)
 
   zero_pad1 = tf.keras.layers.ZeroPadding2D()(down3)  # (bs, 34, 34, 256)
   conv = tf.keras.layers.Conv2D(
-      BASE_CHANNEL * 32, 4, strides=1, kernel_initializer=initializer,
+      base_channel * 32, 4, strides=1, kernel_initializer=initializer,
       use_bias=False)(zero_pad1)  # (bs, 31, 31, 512)
 
   if norm_type.lower() == 'batchnorm':
