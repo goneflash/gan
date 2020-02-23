@@ -57,4 +57,4 @@ def get_horse_zebra_dataset(batch_size, buffer_size, max_num_samples):
     test_horses = test_horses.take(max_num_samples).cache().shuffle(buffer_size).batch(batch_size)
     test_zebras = test_zebras.take(max_num_samples).cache().shuffle(buffer_size).batch(batch_size)
 
-    return train_horses, train_zebras
+    return train_horses, train_zebras, test_horses, test_zebras

@@ -53,7 +53,13 @@ def load_image(image_path):
 
   return img
 
-def get_male_female_dataset(batch_size, buffer_size, max_num_samples, dataset_path, cache=False):
+def get_male_female_dataset(
+        batch_size,
+        buffer_size,
+        max_num_samples,
+        dataset_path,
+        train_split=0.8,
+        cache=False):
     male_images = []
     female_images = []
     attrs_file_path = os.path.join(dataset_path, 'list_attr_celeba.txt')
@@ -73,17 +79,27 @@ def get_male_female_dataset(batch_size, buffer_size, max_num_samples, dataset_pa
     print('Available male size {}'.format(len(male_images)))
     print('Available female size {}'.format(len(female_images)))
 
-    male_ds = tf.data.Dataset.from_tensor_slices(male_images[0:max_num_samples])
-    female_ds = tf.data.Dataset.from_tensor_slices(female_images[0:max_num_samples])
+    train_range = int(max_num_samples * train_split)
 
-    male_ds = male_ds.map(load_image, num_parallel_calls=AUTOTUNE)
-    female_ds = female_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+    male_train_ds = tf.data.Dataset.from_tensor_slices(male_images[0:train_range])
+    female_train_ds = tf.data.Dataset.from_tensor_slices(female_images[0:train_range])
+    male_train_ds = male_train_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+    female_train_ds = female_train_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+
+    male_test_ds = tf.data.Dataset.from_tensor_slices(male_images[train_range:max_num_samples])
+    female_test_ds = tf.data.Dataset.from_tensor_slices(female_images[train_range:max_num_samples])
+    male_test_ds = male_test_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+    female_test_ds = female_test_ds.map(load_image, num_parallel_calls=AUTOTUNE)
 
     if cache:
-        male_ds = male_ds.cache()
-        female_ds = female_ds.cache()
+        male_train_ds = male_train_ds.cache()
+        female_train_ds = female_train_ds.cache()
+        male_test_ds = male_test_ds.cache()
+        female_test_ds = female_test_ds.cache()
 
-    male_ds = male_ds.shuffle(buffer_size).batch(batch_size)
-    female_ds = female_ds.shuffle(buffer_size).batch(batch_size)
+    male_train_ds = male_train_ds.shuffle(buffer_size).batch(batch_size)
+    female_train_ds = female_train_ds.shuffle(buffer_size).batch(batch_size)
+    male_test_ds = male_test_ds.shuffle(buffer_size).batch(batch_size)
+    female_test_ds = female_test_ds.shuffle(buffer_size).batch(batch_size)
 
-    return male_ds, female_ds
+    return male_train_ds, female_train_ds, male_test_ds, female_test_ds

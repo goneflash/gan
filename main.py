@@ -1,6 +1,7 @@
-# Usage: python main.py --mode=predict --ckpt_path=./checkpoints/saved_ckpt
+# Usage:
+#        python main.py --mode=train --dataset_path=/home/fan/dataset/celeb_img_align
+#        python main.py --mode=predict --ckpt_path=./checkpoints/saved_ckpt
 #        python main.py --mode=distill --ckpt_path=./checkpoints/saved_ckpt
-#        python main.py --mode=train
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -65,27 +66,88 @@ def distill_step(input_image):
 
 @tf.function
 def train_step(real_x, real_y):
-  # persistent is set to True because the tape is used more than
-  # once to calculate the gradients.
-  with tf.GradientTape(persistent=True) as tape:
-    # Generator G translates X -> Y
-    # Generator F translates Y -> X.
+    # persistent is set to True because the tape is used more than
+    # once to calculate the gradients.
+    with tf.GradientTape(persistent=True) as tape:
+      # Generator G translates X -> Y
+      # Generator F translates Y -> X.
+      
+      fake_y = generator_g(real_x, training=True)
+      cycled_x = generator_f(fake_y, training=True)
+  
+      fake_x = generator_f(real_y, training=True)
+      cycled_y = generator_g(fake_x, training=True)
+  
+      # same_x and same_y are used for identity loss.
+      same_x = generator_f(real_x, training=True)
+      same_y = generator_g(real_y, training=True)
+  
+      disc_real_x = discriminator_x(real_x, training=True)
+      disc_real_y = discriminator_y(real_y, training=True)
+  
+      disc_fake_x = discriminator_x(fake_x, training=True)
+      disc_fake_y = discriminator_y(fake_y, training=True)
+  
+      # calculate the loss
+      gen_g_loss = generator_loss(disc_fake_y)
+      gen_f_loss = generator_loss(disc_fake_x)
+      
+      total_cycle_loss = calc_cycle_loss(real_x, cycled_x) + calc_cycle_loss(real_y, cycled_y)
+      
+      # Total generator loss = adversarial loss + cycle loss
+      total_gen_g_loss = gen_g_loss + total_cycle_loss + identity_loss(real_y, same_y)
+      total_gen_f_loss = gen_f_loss + total_cycle_loss + identity_loss(real_x, same_x)
+  
+      generator_g_train_loss(total_gen_g_loss)
+      generator_f_train_loss(total_gen_f_loss)
+  
+      disc_x_loss = discriminator_loss(disc_real_x, disc_fake_x)
+      disc_y_loss = discriminator_loss(disc_real_y, disc_fake_y)
+  
+      discriminator_x_train_loss(disc_x_loss)
+      discriminator_y_train_loss(disc_y_loss)
     
-    fake_y = generator_g(real_x, training=True)
-    cycled_x = generator_f(fake_y, training=True)
+    # Calculate the gradients for generator and discriminator
+    generator_g_gradients = tape.gradient(total_gen_g_loss, 
+                                          generator_g.trainable_variables)
+    generator_f_gradients = tape.gradient(total_gen_f_loss, 
+                                          generator_f.trainable_variables)
+    
+    discriminator_x_gradients = tape.gradient(disc_x_loss, 
+                                              discriminator_x.trainable_variables)
+    discriminator_y_gradients = tape.gradient(disc_y_loss, 
+                                              discriminator_y.trainable_variables)
+    
+    # Apply the gradients to the optimizer
+    generator_g_optimizer.apply_gradients(zip(generator_g_gradients, 
+                                              generator_g.trainable_variables))
+  
+    generator_f_optimizer.apply_gradients(zip(generator_f_gradients, 
+                                              generator_f.trainable_variables))
+    
+    discriminator_x_optimizer.apply_gradients(zip(discriminator_x_gradients,
+                                                  discriminator_x.trainable_variables))
+    
+    discriminator_y_optimizer.apply_gradients(zip(discriminator_y_gradients,
+                                                  discriminator_y.trainable_variables))
 
-    fake_x = generator_f(real_y, training=True)
-    cycled_y = generator_g(fake_x, training=True)
+@tf.function
+def test_step(real_x, real_y):
+    fake_y = generator_g(real_x, training=False)
+    cycled_x = generator_f(fake_y, training=False)
+
+    fake_x = generator_f(real_y, training=False)
+    cycled_y = generator_g(fake_x, training=False)
 
     # same_x and same_y are used for identity loss.
-    same_x = generator_f(real_x, training=True)
-    same_y = generator_g(real_y, training=True)
+    same_x = generator_f(real_x, training=False)
+    same_y = generator_g(real_y, training=False)
 
-    disc_real_x = discriminator_x(real_x, training=True)
-    disc_real_y = discriminator_y(real_y, training=True)
+    disc_real_x = discriminator_x(real_x, training=False)
+    disc_real_y = discriminator_y(real_y, training=False)
 
-    disc_fake_x = discriminator_x(fake_x, training=True)
-    disc_fake_y = discriminator_y(fake_y, training=True)
+    disc_fake_x = discriminator_x(fake_x, training=False)
+    disc_fake_y = discriminator_y(fake_y, training=False)
 
     # calculate the loss
     gen_g_loss = generator_loss(disc_fake_y)
@@ -97,48 +159,27 @@ def train_step(real_x, real_y):
     total_gen_g_loss = gen_g_loss + total_cycle_loss + identity_loss(real_y, same_y)
     total_gen_f_loss = gen_f_loss + total_cycle_loss + identity_loss(real_x, same_x)
 
-    generator_g_train_loss(total_gen_g_loss)
-    generator_f_train_loss(total_gen_f_loss)
+    generator_g_test_loss(total_gen_g_loss)
+    generator_f_test_loss(total_gen_f_loss)
 
     disc_x_loss = discriminator_loss(disc_real_x, disc_fake_x)
     disc_y_loss = discriminator_loss(disc_real_y, disc_fake_y)
 
-    discriminator_x_train_loss(disc_x_loss)
-    discriminator_y_train_loss(disc_y_loss)
-  
-  # Calculate the gradients for generator and discriminator
-  generator_g_gradients = tape.gradient(total_gen_g_loss, 
-                                        generator_g.trainable_variables)
-  generator_f_gradients = tape.gradient(total_gen_f_loss, 
-                                        generator_f.trainable_variables)
-  
-  discriminator_x_gradients = tape.gradient(disc_x_loss, 
-                                            discriminator_x.trainable_variables)
-  discriminator_y_gradients = tape.gradient(disc_y_loss, 
-                                            discriminator_y.trainable_variables)
-  
-  # Apply the gradients to the optimizer
-  generator_g_optimizer.apply_gradients(zip(generator_g_gradients, 
-                                            generator_g.trainable_variables))
-
-  generator_f_optimizer.apply_gradients(zip(generator_f_gradients, 
-                                            generator_f.trainable_variables))
-  
-  discriminator_x_optimizer.apply_gradients(zip(discriminator_x_gradients,
-                                                discriminator_x.trainable_variables))
-  
-  discriminator_y_optimizer.apply_gradients(zip(discriminator_y_gradients,
-                                                discriminator_y.trainable_variables))
+    discriminator_x_test_loss(disc_x_loss)
+    discriminator_y_test_loss(disc_y_loss)
 
 
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], '', ['mode=', 'ckpt_path='])
+        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=']
+        opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
         print('Usage: main.py --mode=<mode>')
         sys.exit(2)
 
-    checkpoint_path = "./checkpoints/train"
+    checkpoint_path = None
+    dataset_path = None
+    dataset_name = 'gender'
     mode = 'train'
 
     for opt, arg in opts:
@@ -149,11 +190,20 @@ if __name__ == '__main__':
                 exit()
         if opt == '--ckpt_path':
             checkpoint_path = arg
-    print('{} mode'.format(mode))
+        if opt == '--dataset_path':
+            dataset_path = arg
+        if opt == '--dataset_name':
+            dataset_name = arg
+    print('Mode is: {}'.format(mode))
+    print('Dataset is: {}'.format(dataset_name))
+    print('Dataset path: {}'.format(dataset_path))
     
-    #train_horses, train_zebras = get_horse_zebra_dataset(BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
-    train_horses, train_zebras = get_male_female_dataset(
-            BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, '/home/fan/dataset/celeb_img_align')
+    if dataset_name == 'gender':
+        train_x, train_y, test_x, test_y = get_male_female_dataset(
+                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path)
+    elif dataset_name == 'horse':
+        train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
+                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
 
     generator_g = generator()
     generator_f = generator()
@@ -181,7 +231,11 @@ if __name__ == '__main__':
                                discriminator_y_optimizer=discriminator_y_optimizer)
 
     if mode == 'train':
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        if checkpoint_path == None:
+            checkpoint_path = os.path.join('checkpoints', current_time)
         ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+
         # if a checkpoint exists, restore the latest checkpoint.
         if ckpt_manager.latest_checkpoint:
           ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -192,8 +246,11 @@ if __name__ == '__main__':
         generator_g_train_loss = tf.keras.metrics.Mean('generator_g_train_loss', dtype=tf.float32)
         discriminator_y_train_loss = tf.keras.metrics.Mean('discriminator_y_train_loss', dtype=tf.float32)
         discriminator_x_train_loss = tf.keras.metrics.Mean('discriminator_x_train_loss', dtype=tf.float32)
+        generator_f_test_loss = tf.keras.metrics.Mean('generator_f_test_loss', dtype=tf.float32)
+        generator_g_test_loss = tf.keras.metrics.Mean('generator_g_test_loss', dtype=tf.float32)
+        discriminator_y_test_loss = tf.keras.metrics.Mean('discriminator_y_test_loss', dtype=tf.float32)
+        discriminator_x_test_loss = tf.keras.metrics.Mean('discriminator_x_test_loss', dtype=tf.float32)
     
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         generator_f_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_f_train'
         generator_g_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_train'
         generator_f_train_summary_writer = tf.summary.create_file_writer(generator_f_train_log_dir)
@@ -202,27 +259,47 @@ if __name__ == '__main__':
         discriminator_x_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_train'
         discriminator_y_train_summary_writer = tf.summary.create_file_writer(discriminator_y_train_log_dir)
         discriminator_x_train_summary_writer = tf.summary.create_file_writer(discriminator_x_train_log_dir)
+        generator_f_test_log_dir = 'logs/gradient_tape/' + current_time + '/generator_f_test'
+        generator_g_test_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_test'
+        generator_f_test_summary_writer = tf.summary.create_file_writer(generator_f_test_log_dir)
+        generator_g_test_summary_writer = tf.summary.create_file_writer(generator_g_test_log_dir)
+        discriminator_y_test_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_y_test'
+        discriminator_x_test_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_test'
+        discriminator_y_test_summary_writer = tf.summary.create_file_writer(discriminator_y_test_log_dir)
+        discriminator_x_test_summary_writer = tf.summary.create_file_writer(discriminator_x_test_log_dir)
     
         for epoch in range(EPOCHS):
           start = time.time()
         
-          for image_x, image_y in tf.data.Dataset.zip((train_horses, train_zebras)):
+          for image_x, image_y in tf.data.Dataset.zip((train_x, train_y)):
             train_step(image_x, image_y)
+
+          for image_x, image_y in tf.data.Dataset.zip((test_x, test_y)):
+            test_step(image_x, image_y)
           
           fake_y = generator_g(image_x)
           fake_x = generator_f(image_y)
           with generator_f_train_summary_writer.as_default():
               tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
-              tf.summary.image("Input X", image_x, step=epoch)
-              tf.summary.image("Faked Y", fake_y, step=epoch)
           with generator_g_train_summary_writer.as_default():
               tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
-              tf.summary.image("Input Y", image_y, step=epoch)
-              tf.summary.image("Faked X", fake_x, step=epoch)
           with discriminator_y_train_summary_writer.as_default():
               tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
           with discriminator_x_train_summary_writer.as_default():
               tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
+
+          with generator_f_test_summary_writer.as_default():
+              tf.summary.scalar('generator_loss', generator_f_test_loss.result(), step=epoch)
+              tf.summary.image("Input X", image_x, step=epoch)
+              tf.summary.image("Faked Y", fake_y, step=epoch)
+          with generator_g_test_summary_writer.as_default():
+              tf.summary.scalar('generator_loss', generator_g_test_loss.result(), step=epoch)
+              tf.summary.image("Input Y", image_y, step=epoch)
+              tf.summary.image("Faked X", fake_x, step=epoch)
+          with discriminator_y_test_summary_writer.as_default():
+              tf.summary.scalar('discriminator_loss', discriminator_y_test_loss.result(), step=epoch)
+          with discriminator_x_test_summary_writer.as_default():
+              tf.summary.scalar('discriminator_loss', discriminator_x_test_loss.result(), step=epoch)
         
           if (epoch + 1) % 20 == 0:
             ckpt_save_path = ckpt_manager.save()
@@ -233,6 +310,11 @@ if __name__ == '__main__':
           generator_g_train_loss.reset_states()
           discriminator_y_train_loss.reset_states()
           discriminator_x_train_loss.reset_states()
+          generator_f_test_loss.reset_states()
+          generator_g_test_loss.reset_states()
+          discriminator_y_test_loss.reset_states()
+          discriminator_x_test_loss.reset_states()
+
           print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
                                                               time.time()-start))
     elif mode == 'distill':
@@ -261,7 +343,7 @@ if __name__ == '__main__':
         for epoch in range(EPOCHS):
           start = time.time()
         
-          for image_x in train_horses:
+          for image_x in train_x:
             distill_step(image_x)
           if (epoch + 1) % 20 == 0:
             distill_ckpt_save_path = distill_ckpt_manager.save()
@@ -280,7 +362,7 @@ if __name__ == '__main__':
         tiny_generator.save('./saved_model/tiny_generator') 
 
         # Also make some predictions
-        for index, horse in enumerate(train_horses.take(NUM_SAMPLES_FOR_PREDICT)):
+        for index, horse in enumerate(train_x.take(NUM_SAMPLES_FOR_PREDICT)):
             big_model_output = generator_g(horse)
             tiny_model_output = tiny_generator(horse)
 
@@ -302,7 +384,7 @@ if __name__ == '__main__':
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
 
-        for index, horse in enumerate(train_horses.take(NUM_SAMPLES_FOR_PREDICT)):
+        for index, horse in enumerate(train_x.take(NUM_SAMPLES_FOR_PREDICT)):
             fake_zebra = generator_g(horse)
             image = np.concatenate((horse[0].numpy(), fake_zebra[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
@@ -312,7 +394,7 @@ if __name__ == '__main__':
             file_name = os.path.join('./', 'output', 'fake_zebra' + str(index) + '.png')
             pil_img.save(file_name)
 
-        for index, zebra in enumerate(train_zebras.take(NUM_SAMPLES_FOR_PREDICT)):
+        for index, zebra in enumerate(train_y.take(NUM_SAMPLES_FOR_PREDICT)):
             fake_horse = generator_f(zebra)
             image = np.concatenate((zebra[0].numpy(), fake_horse[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
