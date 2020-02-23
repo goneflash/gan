@@ -1,13 +1,14 @@
 # Usage: python main.py --mode=predict --ckpt_path=./checkpoints/saved_ckpt
-#        python main.py --mode=train
 #        python main.py --mode=distill --ckpt_path=./checkpoints/saved_ckpt
+#        python main.py --mode=train
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from model import generator, discriminator
-from dataset import get_male_female_dataset, get_horse_zebra_dataset
+from dataset_horse_zebra import get_horse_zebra_dataset
+from dataset_male_female import get_male_female_dataset
 
 import argparse
 import os
@@ -24,7 +25,7 @@ from IPython.display import clear_output
 EPOCHS = 100
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
-BATCH_SIZE = 1
+BATCH_SIZE = 2
 MAX_NUM_SAMPLES = 10
 NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
@@ -32,9 +33,7 @@ LAMBDA = 10
 
 def discriminator_loss(real, generated):
   real_loss = loss_obj(tf.ones_like(real), real)
-
   generated_loss = loss_obj(tf.zeros_like(generated), generated)
-
   total_disc_loss = real_loss + generated_loss
 
   return total_disc_loss * 0.5
@@ -153,7 +152,8 @@ if __name__ == '__main__':
     print('{} mode'.format(mode))
     
     #train_horses, train_zebras = get_horse_zebra_dataset(BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
-    train_horses, train_zebras = get_male_female_dataset(BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
+    train_horses, train_zebras = get_male_female_dataset(
+            BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, '/home/fan/dataset/celeb_img_align')
 
     generator_g = generator()
     generator_f = generator()
