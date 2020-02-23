@@ -5,6 +5,8 @@ from tensorflow_examples.models.pix2pix import pix2pix
 
 OUTPUT_CHANNELS = 3
 BASE_CHANNEL = 16 
+IMG_WIDTH = 256
+IMG_HEIGHT = 256
 
 def generator(base_channel=BASE_CHANNEL):
     return unet_generator(base_channel, OUTPUT_CHANNELS, norm_type='instancenorm')
@@ -76,7 +78,7 @@ def unet_generator(base_channel, output_channels, norm_type='batchnorm'):
 
   concat = tf.keras.layers.Concatenate()
 
-  inputs = tf.keras.layers.Input(shape=[None, None, 3])
+  inputs = tf.keras.layers.Input(shape=[256, 256, 3])
   x = inputs
 
   # Downsampling through the model
@@ -108,11 +110,11 @@ def discriminator_base(base_channel, norm_type='batchnorm', target=True):
 
   initializer = tf.random_normal_initializer(0., 0.02)
 
-  inp = tf.keras.layers.Input(shape=[None, None, 3], name='input_image')
+  inp = tf.keras.layers.Input(shape=[256, 256, 3], name='input_image')
   x = inp
 
   if target:
-    tar = tf.keras.layers.Input(shape=[None, None, 3], name='target_image')
+    tar = tf.keras.layers.Input(shape=[256, 256, 3], name='target_image')
     x = tf.keras.layers.concatenate([inp, tar])  # (bs, 256, 256, channels*2)
 
 

@@ -1,7 +1,11 @@
 # Usage:
-#        python main.py --mode=train --dataset_path=/home/fan/dataset/celeb_img_align
-#        python main.py --mode=predict --ckpt_path=./checkpoints/saved_ckpt
-#        python main.py --mode=distill --ckpt_path=./checkpoints/saved_ckpt
+#  python main.py --mode=train --dataset_path=/home/fan/dataset/celeb_img_align
+#
+#  python main.py --mode=predict \
+#        --dataset_path=/home/fan/dataset/celeb_img_align --ckpt_path=./checkpoints/saved_ckpt
+#
+#  python main.py --mode=distill \
+#        --dataset_path=/home/fan/dataset/celeb_img_align --ckpt_path=./checkpoints/saved_ckpt
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -23,11 +27,11 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
-EPOCHS = 100
+EPOCHS = 10
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
-BATCH_SIZE = 2
-MAX_NUM_SAMPLES = 10
+BATCH_SIZE = 8
+MAX_NUM_SAMPLES = 100
 NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
 
@@ -52,7 +56,7 @@ def identity_loss(real_image, same_image):
   return LAMBDA * 0.5 * loss
 
 @tf.function
-def distill_step(input_image):
+def distill_train_step(input_image):
     with tf.GradientTape(persistent=True) as tape:
         original_output = generator_g(input_image, training=False)
         tiny_output = tiny_generator(input_image, training=True)
@@ -63,6 +67,13 @@ def distill_step(input_image):
     tiny_generator_gradients = tape.gradient(simulate_loss, tiny_generator.trainable_variables)
     distill_optimizer.apply_gradients(zip(tiny_generator_gradients, tiny_generator.trainable_variables))
 
+@tf.function
+def distill_test_step(input_image):
+    original_output = generator_g(input_image, training=False)
+    tiny_output = tiny_generator(input_image, training=False)
+    simulate_loss = identity_loss(original_output, tiny_output)
+
+    tiny_generator_test_loss(simulate_loss)
 
 @tf.function
 def train_step(real_x, real_y):
@@ -174,8 +185,7 @@ if __name__ == '__main__':
         optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=']
         opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
-        print('Usage: main.py --mode=<mode>')
-        sys.exit(2)
+        sys.exit('Usage: main.py --mode=<mode>')
 
     checkpoint_path = None
     dataset_path = None
@@ -186,8 +196,7 @@ if __name__ == '__main__':
         if opt in ("-m", "--mode"):
             mode = arg
             if mode not in ['train', 'predict', 'distill']:
-                print('Wrong mode: {}'.format(mode))
-                exit()
+                exit('Wrong mode: {}'.format(mode))
         if opt == '--ckpt_path':
             checkpoint_path = arg
         if opt == '--dataset_path':
@@ -229,9 +238,9 @@ if __name__ == '__main__':
                                generator_f_optimizer=generator_f_optimizer,
                                discriminator_x_optimizer=discriminator_x_optimizer,
                                discriminator_y_optimizer=discriminator_y_optimizer)
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     if mode == 'train':
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         if checkpoint_path == None:
             checkpoint_path = os.path.join('checkpoints', current_time)
         ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
@@ -273,9 +282,12 @@ if __name__ == '__main__':
         
           for image_x, image_y in tf.data.Dataset.zip((train_x, train_y)):
             train_step(image_x, image_y)
+          print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
+          start = time.time()
 
           for image_x, image_y in tf.data.Dataset.zip((test_x, test_y)):
             test_step(image_x, image_y)
+          print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
           
           fake_y = generator_g(image_x)
           fake_x = generator_f(image_y)
@@ -317,91 +329,34 @@ if __name__ == '__main__':
 
           print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
                                                               time.time()-start))
-    elif mode == 'distill':
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
-        if not ckpt_manager.latest_checkpoint:
-            print('Error: ckpt not exist for predict')
-            exit()
-
-        ckpt.restore(ckpt_manager.latest_checkpoint)
-        print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
-
-        tiny_generator = generator(4)
-        tiny_generator.summary()
-        distill_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-        distill_ckpt = tf.train.Checkpoint(
-                tiny_generator=tiny_generator,
-                distill_optimizer=distill_optimizer)
-        distill_ckpt_path = './checkpoints_distill'
-        distill_ckpt_manager = tf.train.CheckpointManager(distill_ckpt, distill_ckpt_path, max_to_keep=5)
-
-        tiny_generator_train_loss = tf.keras.metrics.Mean('tiny_generator_train_loss', dtype=tf.float32)
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        tiny_generator_train_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_train'
-        tiny_generator_train_summary_writer = tf.summary.create_file_writer(tiny_generator_train_log_dir)
-
-        for epoch in range(EPOCHS):
-          start = time.time()
-        
-          for image_x in train_x:
-            distill_step(image_x)
-          if (epoch + 1) % 20 == 0:
-            distill_ckpt_save_path = distill_ckpt_manager.save()
-            print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                                 distill_ckpt_save_path))
-
-          big_model_output = generator_g(image_x)
-          tiny_model_output = tiny_generator(image_x)
-          with tiny_generator_train_summary_writer.as_default():
-              tf.summary.scalar('tiny_generator_loss', tiny_generator_train_loss.result(), step=epoch)
-              tf.summary.image("input X", image_x, step=epoch)
-              tf.summary.image("big output X", big_model_output, step=epoch)
-              tf.summary.image("tiny_model_output", tiny_model_output, step=epoch)
-
-          tiny_generator_train_loss.reset_states()
-        tiny_generator.save('./saved_model/tiny_generator') 
-
-        # Also make some predictions
-        for index, horse in enumerate(train_x.take(NUM_SAMPLES_FOR_PREDICT)):
-            big_model_output = generator_g(horse)
-            tiny_model_output = tiny_generator(horse)
-
-            image = np.concatenate((horse[0].numpy(), big_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
-            image = ((image + 1.0) * 127.5).astype(np.uint8)
-
-            pil_img = Image.fromarray(image)
-
-            file_name = os.path.join('./', 'output_tiny', 'tiny_compare' + str(index) + '.png')
-            pil_img.save(file_name)
 
 
     elif mode == 'predict':
+        if checkpoint_path == None:
+            exit('Error: Please specify checkpoint path')
         ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
         if not ckpt_manager.latest_checkpoint:
-            print('Error: ckpt not exist for predict')
-            exit()
+            exit('Error: ckpt not exist for predict')
 
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
 
-        for index, horse in enumerate(train_x.take(NUM_SAMPLES_FOR_PREDICT)):
-            fake_zebra = generator_g(horse)
-            image = np.concatenate((horse[0].numpy(), fake_zebra[0].numpy()), axis=1)
+        for index, image_x in enumerate(test_x.take(NUM_SAMPLES_FOR_PREDICT)):
+            fake_image_y = generator_g(image_x)
+            image = np.concatenate((image_x[0].numpy(), fake_image_y[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
 
             pil_img = Image.fromarray(image)
-
-            file_name = os.path.join('./', 'output', 'fake_zebra' + str(index) + '.png')
+            file_name = os.path.join('./', 'output', 'fake_image_y' + str(index) + '.png')
             pil_img.save(file_name)
 
-        for index, zebra in enumerate(train_y.take(NUM_SAMPLES_FOR_PREDICT)):
-            fake_horse = generator_f(zebra)
-            image = np.concatenate((zebra[0].numpy(), fake_horse[0].numpy()), axis=1)
+        for index, image_y in enumerate(test_y.take(NUM_SAMPLES_FOR_PREDICT)):
+            fake_image_x = generator_f(image_y)
+            image = np.concatenate((image_y[0].numpy(), fake_image_x[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
 
             pil_img = Image.fromarray(image)
-
-            file_name = os.path.join('./', 'output', 'fake_horse' + str(index) + '.png')
+            file_name = os.path.join('./', 'output', 'fake_image_x' + str(index) + '.png')
             pil_img.save(file_name)
         
         generator_f.save('./saved_model/generator_f') 
@@ -415,6 +370,85 @@ if __name__ == '__main__':
         #batch_input_shape = (None, 256, 256, 3)
         #input_2.build(batch_input_shape)
         #new_model.summary()
+
+    elif mode == 'distill':
+        if checkpoint_path == None:
+            exit('Error: Please specify checkpoint path')
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        if not ckpt_manager.latest_checkpoint:
+            exit('Error: ckpt not exist for predict')
+
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
+
+        tiny_generator = generator(3)
+        tiny_generator.summary()
+
+        distill_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+        distill_ckpt = tf.train.Checkpoint(
+                tiny_generator=tiny_generator,
+                distill_optimizer=distill_optimizer)
+
+        distill_ckpt_path = os.path.join('checkpoints_distill', current_time)
+        distill_ckpt_manager = tf.train.CheckpointManager(distill_ckpt, distill_ckpt_path, max_to_keep=5)
+
+        tiny_generator_train_loss = tf.keras.metrics.Mean('tiny_generator_train_loss', dtype=tf.float32)
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        tiny_generator_train_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_train'
+        tiny_generator_train_summary_writer = tf.summary.create_file_writer(tiny_generator_train_log_dir)
+        tiny_generator_test_loss = tf.keras.metrics.Mean('tiny_generator_test_loss', dtype=tf.float32)
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        tiny_generator_test_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_test'
+        tiny_generator_test_summary_writer = tf.summary.create_file_writer(tiny_generator_test_log_dir)
+
+        for epoch in range(EPOCHS):
+          start = time.time()
+        
+          for image_x in train_x:
+            distill_train_step(image_x)
+          print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
+          start = time.time()
+
+          for image_x in test_x:
+            distill_test_step(image_x)
+          print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
+
+          if (epoch + 1) % 20 == 0:
+            distill_ckpt_save_path = distill_ckpt_manager.save()
+            print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
+                                                                 distill_ckpt_save_path))
+
+          original_model_output = generator_g(image_x)
+          tiny_model_output = tiny_generator(image_x)
+          with tiny_generator_train_summary_writer.as_default():
+              tf.summary.scalar('tiny_generator_loss', tiny_generator_train_loss.result(), step=epoch)
+          with tiny_generator_test_summary_writer.as_default():
+              tf.summary.scalar('tiny_generator_loss', tiny_generator_test_loss.result(), step=epoch)
+              tf.summary.image("input X", image_x, step=epoch)
+              tf.summary.image("original output X", original_model_output, step=epoch)
+              tf.summary.image("tiny_model_output", tiny_model_output, step=epoch)
+
+          tiny_generator_train_loss.reset_states()
+          tiny_generator_test_loss.reset_states()
+        tiny_generator.save('./saved_model/tiny_generator') 
+
+        # Convert to tflite as well.
+        converter = tf.lite.TFLiteConverter.from_keras_model(tiny_generator)
+        tflite_model = converter.convert()
+        open("tflite/converted_model.tflite", "wb").write(tflite_model)
+
+        # Also make some predictions
+        for index, image_x in enumerate(test_x.take(NUM_SAMPLES_FOR_PREDICT)):
+            original_model_output = generator_g(image_x)
+            tiny_model_output = tiny_generator(image_x)
+
+            image = np.concatenate((image_x[0].numpy(), original_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
+            image = ((image + 1.0) * 127.5).astype(np.uint8)
+
+            pil_img = Image.fromarray(image)
+
+            file_name = os.path.join('./', 'output_tiny', 'tiny_compare' + str(index) + '.png')
+            pil_img.save(file_name)
 
     else:
         print('Error: Unknown mode {}'.format(mode))
