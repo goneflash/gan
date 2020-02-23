@@ -56,9 +56,9 @@ def identity_loss(real_image, same_image):
   return LAMBDA * 0.5 * loss
 
 @tf.function
-def distill_train_step(input_image):
+def distill_train_step(input_image, original_generator):
     with tf.GradientTape(persistent=True) as tape:
-        original_output = generator_g(input_image, training=False)
+        original_output = original_generator(input_image, training=False)
         tiny_output = tiny_generator(input_image, training=True)
         simulate_loss = identity_loss(original_output, tiny_output)
 
@@ -68,8 +68,8 @@ def distill_train_step(input_image):
     distill_optimizer.apply_gradients(zip(tiny_generator_gradients, tiny_generator.trainable_variables))
 
 @tf.function
-def distill_test_step(input_image):
-    original_output = generator_g(input_image, training=False)
+def distill_test_step(input_image, original_generator):
+    original_output = original_generator(input_image, training=False)
     tiny_output = tiny_generator(input_image, training=False)
     simulate_loss = identity_loss(original_output, tiny_output)
 
@@ -401,9 +401,11 @@ if __name__ == '__main__':
         if distill_type == 'male2female':
             train_dataset = train_x
             test_dataset = test_x
+            original_generator = generator_g
         elif distill_type == 'female2male':
             train_dataset = train_y
             test_dataset = test_y
+            original_generator = generator_f
         else:
             exit('Error: Unknown distill type')
 
@@ -411,12 +413,12 @@ if __name__ == '__main__':
           start = time.time()
         
           for image_x in train_dataset:
-            distill_train_step(image_x)
+            distill_train_step(image_x, original_generator)
           print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
           start = time.time()
 
           for image_x in test_dataset:
-            distill_test_step(image_x)
+            distill_test_step(image_x, original_generator)
           print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
 
           if (epoch + 1) % 20 == 0:
@@ -424,7 +426,7 @@ if __name__ == '__main__':
             print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
                                                                  distill_ckpt_save_path))
 
-          original_model_output = generator_g(image_x)
+          original_model_output = original_generator(image_x)
           tiny_model_output = tiny_generator(image_x)
           with tiny_generator_train_summary_writer.as_default():
               tf.summary.scalar('tiny_generator_loss', tiny_generator_train_loss.result(), step=epoch)
@@ -445,7 +447,7 @@ if __name__ == '__main__':
 
         # Also make some predictions
         for index, image_x in enumerate(test_x.take(NUM_SAMPLES_FOR_PREDICT)):
-            original_model_output = generator_g(image_x)
+            original_model_output = original_generator(image_x)
             tiny_model_output = tiny_generator(image_x)
 
             image = np.concatenate((image_x[0].numpy(), original_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
