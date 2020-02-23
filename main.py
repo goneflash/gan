@@ -27,11 +27,11 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
-EPOCHS = 10
+EPOCHS = 30
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 8
-MAX_NUM_SAMPLES = 100
+MAX_NUM_SAMPLES = 10000
 NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
 
@@ -182,7 +182,7 @@ def test_step(real_x, real_y):
 
 if __name__ == '__main__':
     try:
-        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=']
+        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=', 'distill_type=']
         opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
         sys.exit('Usage: main.py --mode=<mode>')
@@ -190,6 +190,7 @@ if __name__ == '__main__':
     checkpoint_path = None
     dataset_path = None
     dataset_name = 'gender'
+    distill_type = 'male2female'
     mode = 'train'
 
     for opt, arg in opts:
@@ -203,6 +204,8 @@ if __name__ == '__main__':
             dataset_path = arg
         if opt == '--dataset_name':
             dataset_name = arg
+        if opt == '--distill_type':
+            distill_type = arg
     print('Mode is: {}'.format(mode))
     print('Dataset is: {}'.format(dataset_name))
     print('Dataset path: {}'.format(dataset_path))
@@ -365,12 +368,6 @@ if __name__ == '__main__':
         discriminator_y.save('./saved_model/discriminator_y') 
         generator_f.summary()
 
-        # Load model not working yet.
-        #new_model = tf.keras.models.load_model('saved_model/generator_g')
-        #batch_input_shape = (None, 256, 256, 3)
-        #input_2.build(batch_input_shape)
-        #new_model.summary()
-
     elif mode == 'distill':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
@@ -401,15 +398,24 @@ if __name__ == '__main__':
         tiny_generator_test_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_test'
         tiny_generator_test_summary_writer = tf.summary.create_file_writer(tiny_generator_test_log_dir)
 
+        if distill_type == 'male2female':
+            train_dataset = train_x
+            test_dataset = test_x
+        elif distill_type == 'female2male':
+            train_dataset = train_y
+            test_dataset = test_y
+        else:
+            exit('Error: Unknown distill type')
+
         for epoch in range(EPOCHS):
           start = time.time()
         
-          for image_x in train_x:
+          for image_x in train_dataset:
             distill_train_step(image_x)
           print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
           start = time.time()
 
-          for image_x in test_x:
+          for image_x in test_dataset:
             distill_test_step(image_x)
           print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
 
@@ -430,12 +436,12 @@ if __name__ == '__main__':
 
           tiny_generator_train_loss.reset_states()
           tiny_generator_test_loss.reset_states()
-        tiny_generator.save('./saved_model/tiny_generator') 
+        tiny_generator.save('./saved_model/tiny_' + distill_type + '_generator') 
 
         # Convert to tflite as well.
         converter = tf.lite.TFLiteConverter.from_keras_model(tiny_generator)
         tflite_model = converter.convert()
-        open("tflite/converted_model.tflite", "wb").write(tflite_model)
+        open('tflite/' + distill_type + '.tflite', "wb").write(tflite_model)
 
         # Also make some predictions
         for index, image_x in enumerate(test_x.take(NUM_SAMPLES_FOR_PREDICT)):
