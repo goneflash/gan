@@ -31,7 +31,7 @@ EPOCHS = 30
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 2
-MAX_NUM_SAMPLES = 10000
+MAX_NUM_SAMPLES = 10
 NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
 
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
-                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path)
+                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path, cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
                 BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)

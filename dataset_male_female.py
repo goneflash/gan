@@ -63,6 +63,9 @@ def load_image(image_path):
   img = decode_img(img)
 
   img = random_crop(img)
+  img = tf.image.random_brightness(img, max_delta=0.3)
+  img = tf.image.random_hue(img, max_delta=0.1)
+  img = tf.image.random_saturation(img, lower=0.7, upper=1.3)
 
   return img
 
