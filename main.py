@@ -30,8 +30,8 @@ from IPython.display import clear_output
 EPOCHS = 30
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
-BATCH_SIZE = 8
-MAX_NUM_SAMPLES = 10000
+BATCH_SIZE = 2
+MAX_NUM_SAMPLES = 20
 NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
 
@@ -329,10 +329,6 @@ if __name__ == '__main__':
           generator_g_test_loss.reset_states()
           discriminator_y_test_loss.reset_states()
           discriminator_x_test_loss.reset_states()
-
-          print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
-                                                              time.time()-start))
-
 
     elif mode == 'predict':
         if checkpoint_path == None:

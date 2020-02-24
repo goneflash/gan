@@ -7,6 +7,9 @@ import os
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
+CROP_AUG_RATIO = 0.1
+AUG_IMG_WIDTH = int(IMG_WIDTH * (1.0 + CROP_AUG_RATIO))
+AUG_IMG_HEIGHT = int(IMG_HEIGHT * (1.0 + CROP_AUG_RATIO))
 
 def parse_image_attrs(attrs_file_path):
   with open('/home/fan/dataset/celeb_img_align/list_attr_celeba.txt', 'r') as f:
@@ -43,13 +46,18 @@ def decode_img(img):
   img = tf.image.convert_image_dtype(img, tf.float32)
   # [-1, 1]
   img = (img - 0.5) / 0.5
-  # resize the image to the desired size.
-  return tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT])
+  return img
 
 def load_image(image_path):
   # load the raw data from the file as a string
   img = tf.io.read_file(image_path)
   img = decode_img(img)
+
+  img = tf.image.resize(img, [AUG_IMG_WIDTH, AUG_IMG_HEIGHT],
+                          method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,
+                          preserve_aspect_ratio=False)
+  # Random crop image.
+  img = tf.image.random_crop(img, size=[IMG_HEIGHT, IMG_WIDTH, 3])
 
   return img
 
