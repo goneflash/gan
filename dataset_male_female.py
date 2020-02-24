@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import tensorflow as tf
+import time
 import csv
 import os
 
@@ -48,16 +49,20 @@ def decode_img(img):
   img = (img - 0.5) / 0.5
   return img
 
-def load_image(image_path):
-  # load the raw data from the file as a string
-  img = tf.io.read_file(image_path)
-  img = decode_img(img)
-
+def random_crop(img):
   img = tf.image.resize(img, [AUG_IMG_WIDTH, AUG_IMG_HEIGHT],
                           method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,
                           preserve_aspect_ratio=False)
   # Random crop image.
   img = tf.image.random_crop(img, size=[IMG_HEIGHT, IMG_WIDTH, 3])
+  return img
+
+def load_image(image_path):
+  # load the raw data from the file as a string
+  img = tf.io.read_file(image_path)
+  img = decode_img(img)
+
+  img = random_crop(img)
 
   return img
 
@@ -73,17 +78,21 @@ def get_male_female_dataset(
     attrs_file_path = os.path.join(dataset_path, 'list_attr_celeba.txt')
     all_attrs = parse_image_attrs(attrs_file_path)
 
+    start = time.time()
     for image_name in all_attrs:
       example = all_attrs[image_name]
       # Skip bad examples
       if example['Blurry'] == '1' or example['Wearing_Hat'] == '1':
           continue
       image_path = os.path.join(dataset_path, 'img_align_celeba', image_name)
+      if not os.path.exists(image_path):
+          continue
       if example['Male'] == '1':
         male_images.append(image_path)
       elif example['Male'] == '-1' and example['Wearing_Lipstick'] == '1':
         female_images.append(image_path)
     
+    print ('Time taken for metadata is {} sec\n'.format(time.time()-start))
     print('Available male size {}'.format(len(male_images)))
     print('Available female size {}'.format(len(female_images)))
 
