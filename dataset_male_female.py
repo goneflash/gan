@@ -13,7 +13,7 @@ AUG_IMG_WIDTH = int(IMG_WIDTH * (1.0 + CROP_AUG_RATIO))
 AUG_IMG_HEIGHT = int(IMG_HEIGHT * (1.0 + CROP_AUG_RATIO))
 
 def parse_image_attrs(attrs_file_path):
-  with open('/home/fan/dataset/celeb_img_align/list_attr_celeba.txt', 'r') as f:
+  with open(attrs_file_path, 'r') as f:
     csv_input = csv.reader(f, delimiter=' ')
     all_attrs = {}
     attr_names = None
