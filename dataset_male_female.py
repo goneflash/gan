@@ -60,13 +60,13 @@ def load_image(image_path):
   img = tf.io.read_file(image_path)
   img = decode_img(img)
 
-  # img = random_crop(img)
-  img = tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT], method=tf.image.ResizeMethod.BILINEAR)
+  img = random_crop(img)
+  # img = tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT], method=tf.image.ResizeMethod.BILINEAR)
   # img = tf.image.random_brightness(img, max_delta=0.1)
   # img = tf.clip_by_value(img, 0.0, 1.0)
 
-  img = tf.image.random_hue(img, max_delta=0.1)
-  img = tf.image.random_saturation(img, lower=0.8, upper=1.2)
+  # img = tf.image.random_hue(img, max_delta=0.1)
+  # img = tf.image.random_saturation(img, lower=0.8, upper=1.2)
 
   return img
 
