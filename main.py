@@ -30,8 +30,8 @@ from IPython.display import clear_output
 EPOCHS = 30
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
-BATCH_SIZE = 2
-MAX_NUM_SAMPLES = 10
+BATCH_SIZE = 4
+MAX_NUM_SAMPLES = 100
 NUM_SAMPLES_FOR_PREDICT=50
 LAMBDA = 10
 
@@ -442,7 +442,7 @@ if __name__ == '__main__':
         open('tflite/' + distill_type + '.tflite', "wb").write(tflite_model)
 
         # Also make some predictions
-        for index, image_x in enumerate(test_x.take(NUM_SAMPLES_FOR_PREDICT)):
+        for index, image_x in enumerate(test_dataset.take(NUM_SAMPLES_FOR_PREDICT)):
             original_model_output = original_generator(image_x)
             tiny_model_output = tiny_generator(image_x)
 
