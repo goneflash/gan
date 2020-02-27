@@ -4,6 +4,7 @@ import tensorflow as tf
 import time
 import csv
 import os
+from PIL import Image
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 IMG_WIDTH = 256
@@ -95,6 +96,7 @@ def get_male_female_dataset(
         max_num_samples,
         dataset_path,
         train_split=0.8,
+        skip_small_images=False,
         cache=False):
     male_images = []
     female_images = []
@@ -107,9 +109,17 @@ def get_male_female_dataset(
       # Skip bad examples
       if example['Blurry'] == '1' or example['Wearing_Hat'] == '1':
           continue
+      # Skip non-exist examples
       image_path = os.path.join(dataset_path, 'img_align_celeba', image_name)
       if not os.path.exists(image_path):
           continue
+
+      # skip small examples
+      if skip_small_images:
+        im = Image.open(image_path)
+        if im.size[0] < IMG_WIDTH or im.size[1] < IMG_HEIGHT:
+            continue
+
       if example['Male'] == '1':
         male_images.append(image_path)
       elif example['Male'] == '-1':

@@ -214,7 +214,7 @@ if __name__ == '__main__':
     
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
-                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path, cache=False)
+                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path, skip_small_image=False, cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
                 BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
