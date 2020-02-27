@@ -31,8 +31,10 @@ EPOCHS = 30
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 4
-MAX_NUM_SAMPLES = 100
+MAX_NUM_SAMPLES = 50
 NUM_SAMPLES_FOR_PREDICT=50
+MAX_CKPT_TO_SAVE=10
+NUM_EPOCHES_TO_SAVE=5
 LAMBDA = 10
 
 
@@ -246,7 +248,7 @@ if __name__ == '__main__':
     if mode == 'train':
         if checkpoint_path == None:
             checkpoint_path = os.path.join('checkpoints', current_time)
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
 
         # if a checkpoint exists, restore the latest checkpoint.
         if ckpt_manager.latest_checkpoint:
@@ -333,30 +335,36 @@ if __name__ == '__main__':
     elif mode == 'predict':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
         if not ckpt_manager.latest_checkpoint:
             exit('Error: ckpt not exist for predict')
 
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
 
-        for index, image_x in enumerate(test_x.take(NUM_SAMPLES_FOR_PREDICT)):
+        index = 0
+        for image_x in test_x.take(NUM_SAMPLES_FOR_PREDICT):
             fake_image_y = generator_g(image_x)
-            image = np.concatenate((image_x[0].numpy(), fake_image_y[0].numpy()), axis=1)
-            image = ((image + 1.0) * 127.5).astype(np.uint8)
+            for fake_image, original_image in zip(fake_image_y, image_x):
+              image = np.concatenate((original_image.numpy(), fake_image.numpy()), axis=1)
+              image = ((image + 1.0) * 127.5).astype(np.uint8)
 
-            pil_img = Image.fromarray(image)
-            file_name = os.path.join('./', 'output', 'fake_image_y' + str(index) + '.png')
-            pil_img.save(file_name)
+              pil_img = Image.fromarray(image)
+              file_name = os.path.join('./', 'output', 'fake_image_y' + str(index) + '.png')
+              pil_img.save(file_name)
+              index += 1
 
-        for index, image_y in enumerate(test_y.take(NUM_SAMPLES_FOR_PREDICT)):
+        index = 0
+        for image_y in test_y.take(NUM_SAMPLES_FOR_PREDICT):
             fake_image_x = generator_f(image_y)
-            image = np.concatenate((image_y[0].numpy(), fake_image_x[0].numpy()), axis=1)
-            image = ((image + 1.0) * 127.5).astype(np.uint8)
+            for fake_image, original_image in zip(fake_image_x, image_y):
+              image = np.concatenate((original_image.numpy(), fake_image.numpy()), axis=1)
+              image = ((image + 1.0) * 127.5).astype(np.uint8)
 
-            pil_img = Image.fromarray(image)
-            file_name = os.path.join('./', 'output', 'fake_image_x' + str(index) + '.png')
-            pil_img.save(file_name)
+              pil_img = Image.fromarray(image)
+              file_name = os.path.join('./', 'output', 'fake_image_x' + str(index) + '.png')
+              pil_img.save(file_name)
+              index += 1
         
         generator_f.save('./saved_model/generator_f') 
         generator_g.save('./saved_model/generator_g') 
@@ -367,7 +375,7 @@ if __name__ == '__main__':
     elif mode == 'distill':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
         if not ckpt_manager.latest_checkpoint:
             exit('Error: ckpt not exist for predict')
 
@@ -383,7 +391,7 @@ if __name__ == '__main__':
                 distill_optimizer=distill_optimizer)
 
         distill_ckpt_path = os.path.join('checkpoints_distill', current_time)
-        distill_ckpt_manager = tf.train.CheckpointManager(distill_ckpt, distill_ckpt_path, max_to_keep=5)
+        distill_ckpt_manager = tf.train.CheckpointManager(distill_ckpt, distill_ckpt_path, max_to_keep=MAX_CKPT_TO_SAVE)
 
         tiny_generator_train_loss = tf.keras.metrics.Mean('tiny_generator_train_loss', dtype=tf.float32)
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -417,7 +425,7 @@ if __name__ == '__main__':
             distill_test_step(image_x, original_generator)
           print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
 
-          if (epoch + 1) % 20 == 0:
+          if (epoch + 1) % NUM_EPOCHES_TO_SAVE == 0:
             distill_ckpt_save_path = distill_ckpt_manager.save()
             print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
                                                                  distill_ckpt_save_path))

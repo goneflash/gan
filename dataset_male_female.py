@@ -50,9 +50,7 @@ def decode_img(img):
   return img
 
 def random_crop(img):
-  img = tf.image.resize(img, [AUG_IMG_WIDTH, AUG_IMG_HEIGHT],
-                          method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,
-                          preserve_aspect_ratio=False)
+  img = tf.image.resize_with_pad(img, AUG_IMG_HEIGHT, AUG_IMG_WIDTH, method=tf.image.ResizeMethod.BILINEAR)
   # Random crop image.
   img = tf.image.random_crop(img, size=[IMG_HEIGHT, IMG_WIDTH, 3])
   return img
@@ -63,11 +61,30 @@ def load_image(image_path):
   img = decode_img(img)
 
   img = random_crop(img)
-  img = tf.image.random_brightness(img, max_delta=0.3)
-  img = tf.image.random_hue(img, max_delta=0.1)
-  img = tf.image.random_saturation(img, lower=0.7, upper=1.3)
+  # img = tf.image.random_brightness(img, max_delta=0.3)
+  # img = tf.image.random_hue(img, max_delta=0.1)
+  # img = tf.image.random_saturation(img, lower=0.7, upper=1.3)
 
   return img
+
+def load_dataset(image_paths, max_num_samples, train_split, buffer_size, batch_size, cache=False):
+    num_samples = min(max_num_samples, len(image_paths))
+    train_range = int(num_samples * train_split)
+
+    train_ds = tf.data.Dataset.from_tensor_slices(image_paths[0:train_range])
+    train_ds = train_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+
+    test_ds = tf.data.Dataset.from_tensor_slices(image_paths[train_range:num_samples])
+    test_ds = test_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+
+    if cache:
+        train_ds = train_ds.cache()
+        test_ds = test_ds.cache()
+
+    train_ds = train_ds.shuffle(buffer_size).batch(batch_size)
+    test_ds = test_ds.shuffle(buffer_size).batch(batch_size)
+    return train_ds, test_ds
+
 
 def get_male_female_dataset(
         batch_size,
@@ -92,34 +109,14 @@ def get_male_female_dataset(
           continue
       if example['Male'] == '1':
         male_images.append(image_path)
-      elif example['Male'] == '-1' and example['Wearing_Lipstick'] == '1':
+      elif example['Male'] == '-1':
         female_images.append(image_path)
     
     print ('Time taken for metadata is {} sec\n'.format(time.time()-start))
     print('Available male size {}'.format(len(male_images)))
     print('Available female size {}'.format(len(female_images)))
 
-    train_range = int(max_num_samples * train_split)
-
-    male_train_ds = tf.data.Dataset.from_tensor_slices(male_images[0:train_range])
-    female_train_ds = tf.data.Dataset.from_tensor_slices(female_images[0:train_range])
-    male_train_ds = male_train_ds.map(load_image, num_parallel_calls=AUTOTUNE)
-    female_train_ds = female_train_ds.map(load_image, num_parallel_calls=AUTOTUNE)
-
-    male_test_ds = tf.data.Dataset.from_tensor_slices(male_images[train_range:max_num_samples])
-    female_test_ds = tf.data.Dataset.from_tensor_slices(female_images[train_range:max_num_samples])
-    male_test_ds = male_test_ds.map(load_image, num_parallel_calls=AUTOTUNE)
-    female_test_ds = female_test_ds.map(load_image, num_parallel_calls=AUTOTUNE)
-
-    if cache:
-        male_train_ds = male_train_ds.cache()
-        female_train_ds = female_train_ds.cache()
-        male_test_ds = male_test_ds.cache()
-        female_test_ds = female_test_ds.cache()
-
-    male_train_ds = male_train_ds.shuffle(buffer_size).batch(batch_size)
-    female_train_ds = female_train_ds.shuffle(buffer_size).batch(batch_size)
-    male_test_ds = male_test_ds.shuffle(buffer_size).batch(batch_size)
-    female_test_ds = female_test_ds.shuffle(buffer_size).batch(batch_size)
+    male_train_ds, male_test_ds = load_dataset(male_images, max_num_samples, train_split, buffer_size, batch_size)
+    female_train_ds, female_test_ds = load_dataset(female_images, max_num_samples, train_split, buffer_size, batch_size)
 
     return male_train_ds, female_train_ds, male_test_ds, female_test_ds
