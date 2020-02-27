@@ -34,7 +34,7 @@ BATCH_SIZE = 4
 MAX_NUM_SAMPLES = 50
 NUM_SAMPLES_FOR_PREDICT=50
 MAX_CKPT_TO_SAVE=10
-NUM_EPOCHES_TO_SAVE=5
+NUM_EPOCHS_TO_SAVE=5
 LAMBDA = 10
 
 
@@ -307,18 +307,18 @@ if __name__ == '__main__':
 
           with generator_f_test_summary_writer.as_default():
               tf.summary.scalar('generator_loss', generator_f_test_loss.result(), step=epoch)
-              tf.summary.image("Input X", image_x, step=epoch)
-              tf.summary.image("Faked Y", fake_y, step=epoch)
+              tf.summary.image("Input X", image_x, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("Faked Y", fake_y, step=epoch, max_outputs=BATCH_SIZE)
           with generator_g_test_summary_writer.as_default():
               tf.summary.scalar('generator_loss', generator_g_test_loss.result(), step=epoch)
-              tf.summary.image("Input Y", image_y, step=epoch)
-              tf.summary.image("Faked X", fake_x, step=epoch)
+              tf.summary.image("Input Y", image_y, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("Faked X", fake_x, step=epoch, max_outputs=BATCH_SIZE)
           with discriminator_y_test_summary_writer.as_default():
               tf.summary.scalar('discriminator_loss', discriminator_y_test_loss.result(), step=epoch)
           with discriminator_x_test_summary_writer.as_default():
               tf.summary.scalar('discriminator_loss', discriminator_x_test_loss.result(), step=epoch)
         
-          if (epoch + 1) % 20 == 0:
+          if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
             ckpt_save_path = ckpt_manager.save()
             print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
                                                                  ckpt_save_path))
@@ -425,7 +425,7 @@ if __name__ == '__main__':
             distill_test_step(image_x, original_generator)
           print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
 
-          if (epoch + 1) % NUM_EPOCHES_TO_SAVE == 0:
+          if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
             distill_ckpt_save_path = distill_ckpt_manager.save()
             print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
                                                                  distill_ckpt_save_path))
