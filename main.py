@@ -214,7 +214,7 @@ if __name__ == '__main__':
     
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
-                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path, skip_small_image=False, cache=False)
+                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path, skip_small_images=False, cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
                 BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
@@ -287,37 +287,42 @@ if __name__ == '__main__':
         
           for image_x, image_y in tf.data.Dataset.zip((train_x, train_y)):
             train_step(image_x, image_y)
+          
+          fake_y = generator_g(image_x)
+          fake_x = generator_f(image_y)
+          with generator_f_train_summary_writer.as_default():
+              tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
+              tf.summary.image("test input X", image_x, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("test faked Y", fake_y, step=epoch, max_outputs=BATCH_SIZE)
+          with generator_g_train_summary_writer.as_default():
+              tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
+              tf.summary.image("test input Y", image_y, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("test faked X", fake_x, step=epoch, max_outputs=BATCH_SIZE)
+          with discriminator_y_train_summary_writer.as_default():
+              tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
+          with discriminator_x_train_summary_writer.as_default():
+              tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
           print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
           start = time.time()
 
           for image_x, image_y in tf.data.Dataset.zip((test_x, test_y)):
             test_step(image_x, image_y)
           print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
-          
           fake_y = generator_g(image_x)
           fake_x = generator_f(image_y)
-          with generator_f_train_summary_writer.as_default():
-              tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
-          with generator_g_train_summary_writer.as_default():
-              tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
-          with discriminator_y_train_summary_writer.as_default():
-              tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
-          with discriminator_x_train_summary_writer.as_default():
-              tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
-
           with generator_f_test_summary_writer.as_default():
               tf.summary.scalar('generator_loss', generator_f_test_loss.result(), step=epoch)
-              tf.summary.image("Input X", image_x, step=epoch, max_outputs=BATCH_SIZE)
-              tf.summary.image("Faked Y", fake_y, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("test input X", image_x, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("test faked Y", fake_y, step=epoch, max_outputs=BATCH_SIZE)
           with generator_g_test_summary_writer.as_default():
               tf.summary.scalar('generator_loss', generator_g_test_loss.result(), step=epoch)
-              tf.summary.image("Input Y", image_y, step=epoch, max_outputs=BATCH_SIZE)
-              tf.summary.image("Faked X", fake_x, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("test input Y", image_y, step=epoch, max_outputs=BATCH_SIZE)
+              tf.summary.image("test faked X", fake_x, step=epoch, max_outputs=BATCH_SIZE)
           with discriminator_y_test_summary_writer.as_default():
               tf.summary.scalar('discriminator_loss', discriminator_y_test_loss.result(), step=epoch)
           with discriminator_x_test_summary_writer.as_default():
               tf.summary.scalar('discriminator_loss', discriminator_x_test_loss.result(), step=epoch)
-        
+
           if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
             ckpt_save_path = ckpt_manager.save()
             print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
