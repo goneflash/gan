@@ -184,7 +184,7 @@ def test_step(real_x, real_y):
 
 if __name__ == '__main__':
     try:
-        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=', 'distill_type=']
+        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=', 'distill_type=', 'batch_size=', 'max_num_samples=']
         opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
         sys.exit('Usage: main.py --mode=<mode>')
@@ -194,6 +194,8 @@ if __name__ == '__main__':
     dataset_name = 'gender'
     distill_type = 'male2female'
     mode = 'train'
+    batch_size = BATCH_SIZE
+    max_num_samples = MAX_NUM_SAMPLES
 
     for opt, arg in opts:
         if opt in ("-m", "--mode"):
@@ -208,16 +210,22 @@ if __name__ == '__main__':
             dataset_name = arg
         if opt == '--distill_type':
             distill_type = arg
+        if opt == '--batch_size':
+            batch_size = int(arg)
+        if opt == '--max_num_samples':
+            max_num_samples = int(arg)
     print('Mode is: {}'.format(mode))
     print('Dataset is: {}'.format(dataset_name))
     print('Dataset path: {}'.format(dataset_path))
+    print('Batch size is: {}'.format(batch_size))
+    print('Max num samples is: {}'.format(max_num_samples))
     
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
-                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES, dataset_path, skip_small_images=False, cache=False)
+                batch_size, BUFFER_SIZE, max_num_samples, dataset_path, skip_small_images=False, cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
-                BATCH_SIZE, BUFFER_SIZE, MAX_NUM_SAMPLES)
+                batch_size, BUFFER_SIZE, max_num_samples)
 
     generator_g = generator()
     generator_f = generator()
