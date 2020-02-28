@@ -15,6 +15,7 @@ from model import generator, discriminator
 from dataset_horse_zebra import get_horse_zebra_dataset
 from dataset_male_female import get_male_female_dataset
 from train import train_loop
+from distill import distill_loop
 
 import argparse
 import os
@@ -28,7 +29,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
-EPOCHS = 30
+EPOCHS = 20
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 4
@@ -36,30 +37,6 @@ MAX_NUM_SAMPLES = 50
 NUM_SAMPLES_FOR_PREDICT = 50
 MAX_CKPT_TO_SAVE = 10
 NUM_EPOCHS_TO_SAVE = 5
-
-
-@tf.function
-def distill_train_step(input_image, original_generator):
-    with tf.GradientTape(persistent=True) as tape:
-        original_output = original_generator(input_image, training=False)
-        tiny_output = tiny_generator(input_image, training=True)
-        simulate_loss = identity_loss(original_output, tiny_output)
-
-        tiny_generator_train_loss(simulate_loss)
-
-    tiny_generator_gradients = tape.gradient(
-        simulate_loss, tiny_generator.trainable_variables)
-    distill_optimizer.apply_gradients(
-        zip(tiny_generator_gradients, tiny_generator.trainable_variables))
-
-
-@tf.function
-def distill_test_step(input_image, original_generator):
-    original_output = original_generator(input_image, training=False)
-    tiny_output = tiny_generator(input_image, training=False)
-    simulate_loss = identity_loss(original_output, tiny_output)
-
-    tiny_generator_test_loss(simulate_loss)
 
 
 if __name__ == '__main__':
@@ -81,7 +58,7 @@ if __name__ == '__main__':
     for opt, arg in opts:
         if opt in ("-m", "--mode"):
             mode = arg
-            if mode not in ['train', 'predict', 'distill']:
+            if mode not in ['train', 'predict', 'distill', 'distill_prediction']:
                 exit('Wrong mode: {}'.format(mode))
         if opt == '--ckpt_path':
             checkpoint_path = arg
@@ -95,11 +72,13 @@ if __name__ == '__main__':
             batch_size = int(arg)
         if opt == '--max_num_samples':
             max_num_samples = int(arg)
+    print('*********************************************')
     print('Mode is: {}'.format(mode))
     print('Dataset is: {}'.format(dataset_name))
     print('Dataset path: {}'.format(dataset_path))
     print('Batch size is: {}'.format(batch_size))
     print('Max num samples is: {}'.format(max_num_samples))
+    print('*********************************************')
 
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
@@ -204,12 +183,6 @@ if __name__ == '__main__':
                 pil_img.save(file_name)
                 index += 1
 
-        generator_f.save('./saved_model/generator_f')
-        generator_g.save('./saved_model/generator_g')
-        discriminator_x.save('./saved_model/discriminator_x')
-        discriminator_y.save('./saved_model/discriminator_y')
-        generator_f.summary()
-
     elif mode == 'distill':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
@@ -234,21 +207,6 @@ if __name__ == '__main__':
         distill_ckpt_manager = tf.train.CheckpointManager(
             distill_ckpt, distill_ckpt_path, max_to_keep=MAX_CKPT_TO_SAVE)
 
-        tiny_generator_train_loss = tf.keras.metrics.Mean(
-            'tiny_generator_train_loss', dtype=tf.float32)
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        tiny_generator_train_log_dir = 'logs/gradient_tape/' + \
-            current_time + '/tiny_generator_train'
-        tiny_generator_train_summary_writer = tf.summary.create_file_writer(
-            tiny_generator_train_log_dir)
-        tiny_generator_test_loss = tf.keras.metrics.Mean(
-            'tiny_generator_test_loss', dtype=tf.float32)
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        tiny_generator_test_log_dir = 'logs/gradient_tape/' + \
-            current_time + '/tiny_generator_test'
-        tiny_generator_test_summary_writer = tf.summary.create_file_writer(
-            tiny_generator_test_log_dir)
-
         if distill_type == 'male2female':
             train_dataset = train_x
             test_dataset = test_x
@@ -260,43 +218,16 @@ if __name__ == '__main__':
         else:
             exit('Error: Unknown distill type')
 
-        for epoch in range(EPOCHS):
-            start = time.time()
-
-            for image_x in train_dataset:
-                distill_train_step(image_x, original_generator)
-            print('Time taken for training epoch {} is {} sec\n'.format(
-                epoch + 1, time.time()-start))
-            start = time.time()
-
-            for image_x in test_dataset:
-                distill_test_step(image_x, original_generator)
-            print('Time taken for test epoch {} is {} sec\n'.format(
-                epoch + 1, time.time()-start))
-
-            if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
-                distill_ckpt_save_path = distill_ckpt_manager.save()
-                print('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                                    distill_ckpt_save_path))
-
-            original_model_output = original_generator(image_x)
-            tiny_model_output = tiny_generator(image_x)
-            with tiny_generator_train_summary_writer.as_default():
-                tf.summary.scalar('tiny_generator_loss',
-                                  tiny_generator_train_loss.result(), step=epoch)
-            with tiny_generator_test_summary_writer.as_default():
-                tf.summary.scalar('tiny_generator_loss',
-                                  tiny_generator_test_loss.result(), step=epoch)
-                tf.summary.image("input X", image_x, step=epoch)
-                tf.summary.image("original output X",
-                                 original_model_output, step=epoch)
-                tf.summary.image("tiny_model_output",
-                                 tiny_model_output, step=epoch)
-
-            tiny_generator_train_loss.reset_states()
-            tiny_generator_test_loss.reset_states()
-        tiny_generator.save('./saved_model/tiny_' +
-                            distill_type + '_generator')
+        distill_loop(
+            train_dataset,
+            test_dataset,
+            tiny_generator,
+            original_generator,
+            distill_optimizer,
+            distill_ckpt_manager,
+            batch_size=batch_size,
+            epochs=EPOCHS,
+            num_epochs_to_save=NUM_EPOCHS_TO_SAVE)
 
         # Convert to tflite as well.
         converter = tf.lite.TFLiteConverter.from_keras_model(tiny_generator)

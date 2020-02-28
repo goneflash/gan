@@ -136,11 +136,7 @@ def test_step(
         generator_g,
         generator_f,
         discriminator_x,
-        discriminator_y,
-        generator_g_optimizer,
-        generator_f_optimizer,
-        discriminator_x_optimizer,
-        discriminator_y_optimizer):
+        discriminator_y):
     fake_y = generator_g(real_x, training=False)
     cycled_x = generator_f(fake_y, training=False)
 
@@ -266,11 +262,7 @@ def train_loop(
                 generator_g,
                 generator_f,
                 discriminator_x,
-                discriminator_y,
-                generator_g_optimizer,
-                generator_f_optimizer,
-                discriminator_x_optimizer,
-                discriminator_y_optimizer)
+                discriminator_y)
         print('Time taken for test epoch {} is {} sec\n'.format(
             epoch + 1, time.time()-start))
         fake_y = generator_g(image_x)
