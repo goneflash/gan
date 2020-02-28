@@ -67,7 +67,7 @@ def distill_loop(
     for epoch in range(epochs):
         start = time.time()
 
-        # Train 
+        # Train
         for image_x in train_dataset:
             distill_train_step(
                 image_x,
