@@ -32,30 +32,34 @@ OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 4
 MAX_NUM_SAMPLES = 50
-NUM_SAMPLES_FOR_PREDICT=50
-MAX_CKPT_TO_SAVE=10
-NUM_EPOCHS_TO_SAVE=5
+NUM_SAMPLES_FOR_PREDICT = 50
+MAX_CKPT_TO_SAVE = 10
+NUM_EPOCHS_TO_SAVE = 5
 LAMBDA = 10
 
 
 def discriminator_loss(real, generated):
-  real_loss = loss_obj(tf.ones_like(real), real)
-  generated_loss = loss_obj(tf.zeros_like(generated), generated)
-  total_disc_loss = real_loss + generated_loss
+    real_loss = loss_obj(tf.ones_like(real), real)
+    generated_loss = loss_obj(tf.zeros_like(generated), generated)
+    total_disc_loss = real_loss + generated_loss
 
-  return total_disc_loss * 0.5
+    return total_disc_loss * 0.5
+
 
 def generator_loss(generated):
-  return loss_obj(tf.ones_like(generated), generated)
+    return loss_obj(tf.ones_like(generated), generated)
+
 
 def calc_cycle_loss(real_image, cycled_image):
-  loss1 = tf.reduce_mean(tf.abs(real_image - cycled_image))
-  
-  return LAMBDA * loss1
+    loss1 = tf.reduce_mean(tf.abs(real_image - cycled_image))
+
+    return LAMBDA * loss1
+
 
 def identity_loss(real_image, same_image):
-  loss = tf.reduce_mean(tf.abs(real_image - same_image))
-  return LAMBDA * 0.5 * loss
+    loss = tf.reduce_mean(tf.abs(real_image - same_image))
+    return LAMBDA * 0.5 * loss
+
 
 @tf.function
 def distill_train_step(input_image, original_generator):
@@ -66,8 +70,11 @@ def distill_train_step(input_image, original_generator):
 
         tiny_generator_train_loss(simulate_loss)
 
-    tiny_generator_gradients = tape.gradient(simulate_loss, tiny_generator.trainable_variables)
-    distill_optimizer.apply_gradients(zip(tiny_generator_gradients, tiny_generator.trainable_variables))
+    tiny_generator_gradients = tape.gradient(
+        simulate_loss, tiny_generator.trainable_variables)
+    distill_optimizer.apply_gradients(
+        zip(tiny_generator_gradients, tiny_generator.trainable_variables))
+
 
 @tf.function
 def distill_test_step(input_image, original_generator):
@@ -77,72 +84,77 @@ def distill_test_step(input_image, original_generator):
 
     tiny_generator_test_loss(simulate_loss)
 
+
 @tf.function
 def train_step(real_x, real_y):
     # persistent is set to True because the tape is used more than
     # once to calculate the gradients.
     with tf.GradientTape(persistent=True) as tape:
-      # Generator G translates X -> Y
-      # Generator F translates Y -> X.
-      
-      fake_y = generator_g(real_x, training=True)
-      cycled_x = generator_f(fake_y, training=True)
-  
-      fake_x = generator_f(real_y, training=True)
-      cycled_y = generator_g(fake_x, training=True)
-  
-      # same_x and same_y are used for identity loss.
-      same_x = generator_f(real_x, training=True)
-      same_y = generator_g(real_y, training=True)
-  
-      disc_real_x = discriminator_x(real_x, training=True)
-      disc_real_y = discriminator_y(real_y, training=True)
-  
-      disc_fake_x = discriminator_x(fake_x, training=True)
-      disc_fake_y = discriminator_y(fake_y, training=True)
-  
-      # calculate the loss
-      gen_g_loss = generator_loss(disc_fake_y)
-      gen_f_loss = generator_loss(disc_fake_x)
-      
-      total_cycle_loss = calc_cycle_loss(real_x, cycled_x) + calc_cycle_loss(real_y, cycled_y)
-      
-      # Total generator loss = adversarial loss + cycle loss
-      total_gen_g_loss = gen_g_loss + total_cycle_loss + identity_loss(real_y, same_y)
-      total_gen_f_loss = gen_f_loss + total_cycle_loss + identity_loss(real_x, same_x)
-  
-      generator_g_train_loss(total_gen_g_loss)
-      generator_f_train_loss(total_gen_f_loss)
-  
-      disc_x_loss = discriminator_loss(disc_real_x, disc_fake_x)
-      disc_y_loss = discriminator_loss(disc_real_y, disc_fake_y)
-  
-      discriminator_x_train_loss(disc_x_loss)
-      discriminator_y_train_loss(disc_y_loss)
-    
+        # Generator G translates X -> Y
+        # Generator F translates Y -> X.
+
+        fake_y = generator_g(real_x, training=True)
+        cycled_x = generator_f(fake_y, training=True)
+
+        fake_x = generator_f(real_y, training=True)
+        cycled_y = generator_g(fake_x, training=True)
+
+        # same_x and same_y are used for identity loss.
+        same_x = generator_f(real_x, training=True)
+        same_y = generator_g(real_y, training=True)
+
+        disc_real_x = discriminator_x(real_x, training=True)
+        disc_real_y = discriminator_y(real_y, training=True)
+
+        disc_fake_x = discriminator_x(fake_x, training=True)
+        disc_fake_y = discriminator_y(fake_y, training=True)
+
+        # calculate the loss
+        gen_g_loss = generator_loss(disc_fake_y)
+        gen_f_loss = generator_loss(disc_fake_x)
+
+        total_cycle_loss = calc_cycle_loss(
+            real_x, cycled_x) + calc_cycle_loss(real_y, cycled_y)
+
+        # Total generator loss = adversarial loss + cycle loss
+        total_gen_g_loss = gen_g_loss + \
+            total_cycle_loss + identity_loss(real_y, same_y)
+        total_gen_f_loss = gen_f_loss + \
+            total_cycle_loss + identity_loss(real_x, same_x)
+
+        generator_g_train_loss(total_gen_g_loss)
+        generator_f_train_loss(total_gen_f_loss)
+
+        disc_x_loss = discriminator_loss(disc_real_x, disc_fake_x)
+        disc_y_loss = discriminator_loss(disc_real_y, disc_fake_y)
+
+        discriminator_x_train_loss(disc_x_loss)
+        discriminator_y_train_loss(disc_y_loss)
+
     # Calculate the gradients for generator and discriminator
-    generator_g_gradients = tape.gradient(total_gen_g_loss, 
+    generator_g_gradients = tape.gradient(total_gen_g_loss,
                                           generator_g.trainable_variables)
-    generator_f_gradients = tape.gradient(total_gen_f_loss, 
+    generator_f_gradients = tape.gradient(total_gen_f_loss,
                                           generator_f.trainable_variables)
-    
-    discriminator_x_gradients = tape.gradient(disc_x_loss, 
+
+    discriminator_x_gradients = tape.gradient(disc_x_loss,
                                               discriminator_x.trainable_variables)
-    discriminator_y_gradients = tape.gradient(disc_y_loss, 
+    discriminator_y_gradients = tape.gradient(disc_y_loss,
                                               discriminator_y.trainable_variables)
-    
+
     # Apply the gradients to the optimizer
-    generator_g_optimizer.apply_gradients(zip(generator_g_gradients, 
+    generator_g_optimizer.apply_gradients(zip(generator_g_gradients,
                                               generator_g.trainable_variables))
-  
-    generator_f_optimizer.apply_gradients(zip(generator_f_gradients, 
+
+    generator_f_optimizer.apply_gradients(zip(generator_f_gradients,
                                               generator_f.trainable_variables))
-    
+
     discriminator_x_optimizer.apply_gradients(zip(discriminator_x_gradients,
                                                   discriminator_x.trainable_variables))
-    
+
     discriminator_y_optimizer.apply_gradients(zip(discriminator_y_gradients,
                                                   discriminator_y.trainable_variables))
+
 
 @tf.function
 def test_step(real_x, real_y):
@@ -165,12 +177,15 @@ def test_step(real_x, real_y):
     # calculate the loss
     gen_g_loss = generator_loss(disc_fake_y)
     gen_f_loss = generator_loss(disc_fake_x)
-    
-    total_cycle_loss = calc_cycle_loss(real_x, cycled_x) + calc_cycle_loss(real_y, cycled_y)
-    
+
+    total_cycle_loss = calc_cycle_loss(
+        real_x, cycled_x) + calc_cycle_loss(real_y, cycled_y)
+
     # Total generator loss = adversarial loss + cycle loss
-    total_gen_g_loss = gen_g_loss + total_cycle_loss + identity_loss(real_y, same_y)
-    total_gen_f_loss = gen_f_loss + total_cycle_loss + identity_loss(real_x, same_x)
+    total_gen_g_loss = gen_g_loss + \
+        total_cycle_loss + identity_loss(real_y, same_y)
+    total_gen_f_loss = gen_f_loss + \
+        total_cycle_loss + identity_loss(real_x, same_x)
 
     generator_g_test_loss(total_gen_g_loss)
     generator_f_test_loss(total_gen_f_loss)
@@ -184,7 +199,8 @@ def test_step(real_x, real_y):
 
 if __name__ == '__main__':
     try:
-        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=', 'distill_type=', 'batch_size=', 'max_num_samples=']
+        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=',
+                              'dataset_name=', 'distill_type=', 'batch_size=', 'max_num_samples=']
         opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
         sys.exit('Usage: main.py --mode=<mode>')
@@ -219,13 +235,13 @@ if __name__ == '__main__':
     print('Dataset path: {}'.format(dataset_path))
     print('Batch size is: {}'.format(batch_size))
     print('Max num samples is: {}'.format(max_num_samples))
-    
+
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
-                batch_size, BUFFER_SIZE, max_num_samples, dataset_path, skip_small_images=False, cache=False)
+            batch_size, BUFFER_SIZE, max_num_samples, dataset_path, skip_small_images=False, cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
-                batch_size, BUFFER_SIZE, max_num_samples)
+            batch_size, BUFFER_SIZE, max_num_samples)
 
     generator_g = generator()
     generator_f = generator()
@@ -236,10 +252,10 @@ if __name__ == '__main__':
     print(generator_g.summary())
     print('Discriminator:')
     print(discriminator_x.summary())
-    
+
     generator_g_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     generator_f_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-    
+
     discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
@@ -256,164 +272,208 @@ if __name__ == '__main__':
     if mode == 'train':
         if checkpoint_path == None:
             checkpoint_path = os.path.join('checkpoints', current_time)
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        ckpt_manager = tf.train.CheckpointManager(
+            ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
 
         # if a checkpoint exists, restore the latest checkpoint.
         if ckpt_manager.latest_checkpoint:
-          ckpt.restore(ckpt_manager.latest_checkpoint)
-          print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
-    
+            ckpt.restore(ckpt_manager.latest_checkpoint)
+            print('Latest checkpoint restored: {}!!'.format(
+                ckpt_manager.latest_checkpoint))
+
         loss_obj = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-        generator_f_train_loss = tf.keras.metrics.Mean('generator_f_train_loss', dtype=tf.float32)
-        generator_g_train_loss = tf.keras.metrics.Mean('generator_g_train_loss', dtype=tf.float32)
-        discriminator_y_train_loss = tf.keras.metrics.Mean('discriminator_y_train_loss', dtype=tf.float32)
-        discriminator_x_train_loss = tf.keras.metrics.Mean('discriminator_x_train_loss', dtype=tf.float32)
-        generator_f_test_loss = tf.keras.metrics.Mean('generator_f_test_loss', dtype=tf.float32)
-        generator_g_test_loss = tf.keras.metrics.Mean('generator_g_test_loss', dtype=tf.float32)
-        discriminator_y_test_loss = tf.keras.metrics.Mean('discriminator_y_test_loss', dtype=tf.float32)
-        discriminator_x_test_loss = tf.keras.metrics.Mean('discriminator_x_test_loss', dtype=tf.float32)
-    
-        generator_f_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_f_train'
-        generator_g_train_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_train'
-        generator_f_train_summary_writer = tf.summary.create_file_writer(generator_f_train_log_dir)
-        generator_g_train_summary_writer = tf.summary.create_file_writer(generator_g_train_log_dir)
-        discriminator_y_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_y_train'
-        discriminator_x_train_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_train'
-        discriminator_y_train_summary_writer = tf.summary.create_file_writer(discriminator_y_train_log_dir)
-        discriminator_x_train_summary_writer = tf.summary.create_file_writer(discriminator_x_train_log_dir)
-        generator_f_test_log_dir = 'logs/gradient_tape/' + current_time + '/generator_f_test'
-        generator_g_test_log_dir = 'logs/gradient_tape/' + current_time + '/generator_g_test'
-        generator_f_test_summary_writer = tf.summary.create_file_writer(generator_f_test_log_dir)
-        generator_g_test_summary_writer = tf.summary.create_file_writer(generator_g_test_log_dir)
-        discriminator_y_test_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_y_test'
-        discriminator_x_test_log_dir = 'logs/gradient_tape/' + current_time + '/discriminator_x_test'
-        discriminator_y_test_summary_writer = tf.summary.create_file_writer(discriminator_y_test_log_dir)
-        discriminator_x_test_summary_writer = tf.summary.create_file_writer(discriminator_x_test_log_dir)
-    
+        generator_f_train_loss = tf.keras.metrics.Mean(
+            'generator_f_train_loss', dtype=tf.float32)
+        generator_g_train_loss = tf.keras.metrics.Mean(
+            'generator_g_train_loss', dtype=tf.float32)
+        discriminator_y_train_loss = tf.keras.metrics.Mean(
+            'discriminator_y_train_loss', dtype=tf.float32)
+        discriminator_x_train_loss = tf.keras.metrics.Mean(
+            'discriminator_x_train_loss', dtype=tf.float32)
+        generator_f_test_loss = tf.keras.metrics.Mean(
+            'generator_f_test_loss', dtype=tf.float32)
+        generator_g_test_loss = tf.keras.metrics.Mean(
+            'generator_g_test_loss', dtype=tf.float32)
+        discriminator_y_test_loss = tf.keras.metrics.Mean(
+            'discriminator_y_test_loss', dtype=tf.float32)
+        discriminator_x_test_loss = tf.keras.metrics.Mean(
+            'discriminator_x_test_loss', dtype=tf.float32)
+
+        log_root_dir = 'logs/gradient_tape/' + current_time
+        generator_f_train_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/generator_f_train')
+        generator_g_train_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/generator_g_train')
+        discriminator_y_train_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/discriminator_y_train')
+        discriminator_x_train_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/discriminator_x_train')
+        generator_f_test_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/generator_f_test')
+        generator_g_test_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/generator_g_test')
+        discriminator_y_test_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/discriminator_y_test')
+        discriminator_x_test_summary_writer = tf.summary.create_file_writer(
+            log_root_dir + '/discriminator_x_test')
+
         for epoch in range(EPOCHS):
-          start = time.time()
-        
-          for image_x, image_y in tf.data.Dataset.zip((train_x, train_y)):
-            train_step(image_x, image_y)
-          
-          fake_y = generator_g(image_x)
-          fake_x = generator_f(image_y)
-          with generator_f_train_summary_writer.as_default():
-              tf.summary.scalar('generator_loss', generator_f_train_loss.result(), step=epoch)
-              tf.summary.image("test input X", image_x, step=epoch, max_outputs=BATCH_SIZE)
-              tf.summary.image("test faked Y", fake_y, step=epoch, max_outputs=BATCH_SIZE)
-          with generator_g_train_summary_writer.as_default():
-              tf.summary.scalar('generator_loss', generator_g_train_loss.result(), step=epoch)
-              tf.summary.image("test input Y", image_y, step=epoch, max_outputs=BATCH_SIZE)
-              tf.summary.image("test faked X", fake_x, step=epoch, max_outputs=BATCH_SIZE)
-          with discriminator_y_train_summary_writer.as_default():
-              tf.summary.scalar('discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
-          with discriminator_x_train_summary_writer.as_default():
-              tf.summary.scalar('discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
-          print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
-          start = time.time()
+            start = time.time()
 
-          for image_x, image_y in tf.data.Dataset.zip((test_x, test_y)):
-            test_step(image_x, image_y)
-          print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
-          fake_y = generator_g(image_x)
-          fake_x = generator_f(image_y)
-          with generator_f_test_summary_writer.as_default():
-              tf.summary.scalar('generator_loss', generator_f_test_loss.result(), step=epoch)
-              tf.summary.image("test input X", image_x, step=epoch, max_outputs=BATCH_SIZE)
-              tf.summary.image("test faked Y", fake_y, step=epoch, max_outputs=BATCH_SIZE)
-          with generator_g_test_summary_writer.as_default():
-              tf.summary.scalar('generator_loss', generator_g_test_loss.result(), step=epoch)
-              tf.summary.image("test input Y", image_y, step=epoch, max_outputs=BATCH_SIZE)
-              tf.summary.image("test faked X", fake_x, step=epoch, max_outputs=BATCH_SIZE)
-          with discriminator_y_test_summary_writer.as_default():
-              tf.summary.scalar('discriminator_loss', discriminator_y_test_loss.result(), step=epoch)
-          with discriminator_x_test_summary_writer.as_default():
-              tf.summary.scalar('discriminator_loss', discriminator_x_test_loss.result(), step=epoch)
+            for image_x, image_y in tf.data.Dataset.zip((train_x, train_y)):
+                train_step(image_x, image_y)
 
-          if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
-            ckpt_save_path = ckpt_manager.save()
-            print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                                 ckpt_save_path))
-        
-          generator_f_train_loss.reset_states()
-          generator_g_train_loss.reset_states()
-          discriminator_y_train_loss.reset_states()
-          discriminator_x_train_loss.reset_states()
-          generator_f_test_loss.reset_states()
-          generator_g_test_loss.reset_states()
-          discriminator_y_test_loss.reset_states()
-          discriminator_x_test_loss.reset_states()
+            fake_y = generator_g(image_x)
+            fake_x = generator_f(image_y)
+            with generator_f_train_summary_writer.as_default():
+                tf.summary.scalar('generator_loss',
+                                  generator_f_train_loss.result(), step=epoch)
+                tf.summary.image("train input X", image_x,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+                tf.summary.image("train faked Y", fake_y,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+            with generator_g_train_summary_writer.as_default():
+                tf.summary.scalar('generator_loss',
+                                  generator_g_train_loss.result(), step=epoch)
+                tf.summary.image("train input Y", image_y,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+                tf.summary.image("train faked X", fake_x,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+            with discriminator_y_train_summary_writer.as_default():
+                tf.summary.scalar(
+                    'discriminator_loss', discriminator_y_train_loss.result(), step=epoch)
+            with discriminator_x_train_summary_writer.as_default():
+                tf.summary.scalar(
+                    'discriminator_loss', discriminator_x_train_loss.result(), step=epoch)
+            print('Time taken for training epoch {} is {} sec\n'.format(
+                epoch + 1, time.time()-start))
+            start = time.time()
+
+            for image_x, image_y in tf.data.Dataset.zip((test_x, test_y)):
+                test_step(image_x, image_y)
+            print('Time taken for test epoch {} is {} sec\n'.format(
+                epoch + 1, time.time()-start))
+            fake_y = generator_g(image_x)
+            fake_x = generator_f(image_y)
+            with generator_f_test_summary_writer.as_default():
+                tf.summary.scalar('generator_loss',
+                                  generator_f_test_loss.result(), step=epoch)
+                tf.summary.image("test input X", image_x,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+                tf.summary.image("test faked Y", fake_y,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+            with generator_g_test_summary_writer.as_default():
+                tf.summary.scalar('generator_loss',
+                                  generator_g_test_loss.result(), step=epoch)
+                tf.summary.image("test input Y", image_y,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+                tf.summary.image("test faked X", fake_x,
+                                 step=epoch, max_outputs=BATCH_SIZE)
+            with discriminator_y_test_summary_writer.as_default():
+                tf.summary.scalar('discriminator_loss',
+                                  discriminator_y_test_loss.result(), step=epoch)
+            with discriminator_x_test_summary_writer.as_default():
+                tf.summary.scalar('discriminator_loss',
+                                  discriminator_x_test_loss.result(), step=epoch)
+
+            if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
+                ckpt_save_path = ckpt_manager.save()
+                print('Saving checkpoint for epoch {} at {}'.format(epoch+1,
+                                                                    ckpt_save_path))
+
+            generator_f_train_loss.reset_states()
+            generator_g_train_loss.reset_states()
+            discriminator_y_train_loss.reset_states()
+            discriminator_x_train_loss.reset_states()
+            generator_f_test_loss.reset_states()
+            generator_g_test_loss.reset_states()
+            discriminator_y_test_loss.reset_states()
+            discriminator_x_test_loss.reset_states()
 
     elif mode == 'predict':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        ckpt_manager = tf.train.CheckpointManager(
+            ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
         if not ckpt_manager.latest_checkpoint:
             exit('Error: ckpt not exist for predict')
 
         ckpt.restore(ckpt_manager.latest_checkpoint)
-        print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
+        print('Latest checkpoint restored: {}!!'.format(
+            ckpt_manager.latest_checkpoint))
 
         index = 0
         for image_x in test_x.take(NUM_SAMPLES_FOR_PREDICT):
             fake_image_y = generator_g(image_x)
             for fake_image, original_image in zip(fake_image_y, image_x):
-              image = np.concatenate((original_image.numpy(), fake_image.numpy()), axis=1)
-              image = ((image + 1.0) * 127.5).astype(np.uint8)
+                image = np.concatenate(
+                    (original_image.numpy(), fake_image.numpy()), axis=1)
+                image = ((image + 1.0) * 127.5).astype(np.uint8)
 
-              pil_img = Image.fromarray(image)
-              file_name = os.path.join('./', 'output', 'fake_image_y' + str(index) + '.png')
-              pil_img.save(file_name)
-              index += 1
+                pil_img = Image.fromarray(image)
+                file_name = os.path.join(
+                    './', 'output', 'fake_image_y' + str(index) + '.png')
+                pil_img.save(file_name)
+                index += 1
 
         index = 0
         for image_y in test_y.take(NUM_SAMPLES_FOR_PREDICT):
             fake_image_x = generator_f(image_y)
             for fake_image, original_image in zip(fake_image_x, image_y):
-              image = np.concatenate((original_image.numpy(), fake_image.numpy()), axis=1)
-              image = ((image + 1.0) * 127.5).astype(np.uint8)
+                image = np.concatenate(
+                    (original_image.numpy(), fake_image.numpy()), axis=1)
+                image = ((image + 1.0) * 127.5).astype(np.uint8)
 
-              pil_img = Image.fromarray(image)
-              file_name = os.path.join('./', 'output', 'fake_image_x' + str(index) + '.png')
-              pil_img.save(file_name)
-              index += 1
-        
-        generator_f.save('./saved_model/generator_f') 
-        generator_g.save('./saved_model/generator_g') 
-        discriminator_x.save('./saved_model/discriminator_x') 
-        discriminator_y.save('./saved_model/discriminator_y') 
+                pil_img = Image.fromarray(image)
+                file_name = os.path.join(
+                    './', 'output', 'fake_image_x' + str(index) + '.png')
+                pil_img.save(file_name)
+                index += 1
+
+        generator_f.save('./saved_model/generator_f')
+        generator_g.save('./saved_model/generator_g')
+        discriminator_x.save('./saved_model/discriminator_x')
+        discriminator_y.save('./saved_model/discriminator_y')
         generator_f.summary()
 
     elif mode == 'distill':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        ckpt_manager = tf.train.CheckpointManager(
+            ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
         if not ckpt_manager.latest_checkpoint:
             exit('Error: ckpt not exist for predict')
 
         ckpt.restore(ckpt_manager.latest_checkpoint)
-        print ('Latest checkpoint restored: {}!!'.format(ckpt_manager.latest_checkpoint))
+        print('Latest checkpoint restored: {}!!'.format(
+            ckpt_manager.latest_checkpoint))
 
         tiny_generator = generator(3)
         tiny_generator.summary()
 
         distill_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
         distill_ckpt = tf.train.Checkpoint(
-                tiny_generator=tiny_generator,
-                distill_optimizer=distill_optimizer)
+            tiny_generator=tiny_generator,
+            distill_optimizer=distill_optimizer)
 
         distill_ckpt_path = os.path.join('checkpoints_distill', current_time)
-        distill_ckpt_manager = tf.train.CheckpointManager(distill_ckpt, distill_ckpt_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        distill_ckpt_manager = tf.train.CheckpointManager(
+            distill_ckpt, distill_ckpt_path, max_to_keep=MAX_CKPT_TO_SAVE)
 
-        tiny_generator_train_loss = tf.keras.metrics.Mean('tiny_generator_train_loss', dtype=tf.float32)
+        tiny_generator_train_loss = tf.keras.metrics.Mean(
+            'tiny_generator_train_loss', dtype=tf.float32)
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        tiny_generator_train_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_train'
-        tiny_generator_train_summary_writer = tf.summary.create_file_writer(tiny_generator_train_log_dir)
-        tiny_generator_test_loss = tf.keras.metrics.Mean('tiny_generator_test_loss', dtype=tf.float32)
+        tiny_generator_train_log_dir = 'logs/gradient_tape/' + \
+            current_time + '/tiny_generator_train'
+        tiny_generator_train_summary_writer = tf.summary.create_file_writer(
+            tiny_generator_train_log_dir)
+        tiny_generator_test_loss = tf.keras.metrics.Mean(
+            'tiny_generator_test_loss', dtype=tf.float32)
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        tiny_generator_test_log_dir = 'logs/gradient_tape/' + current_time + '/tiny_generator_test'
-        tiny_generator_test_summary_writer = tf.summary.create_file_writer(tiny_generator_test_log_dir)
+        tiny_generator_test_log_dir = 'logs/gradient_tape/' + \
+            current_time + '/tiny_generator_test'
+        tiny_generator_test_summary_writer = tf.summary.create_file_writer(
+            tiny_generator_test_log_dir)
 
         if distill_type == 'male2female':
             train_dataset = train_x
@@ -427,35 +487,42 @@ if __name__ == '__main__':
             exit('Error: Unknown distill type')
 
         for epoch in range(EPOCHS):
-          start = time.time()
-        
-          for image_x in train_dataset:
-            distill_train_step(image_x, original_generator)
-          print ('Time taken for training epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
-          start = time.time()
+            start = time.time()
 
-          for image_x in test_dataset:
-            distill_test_step(image_x, original_generator)
-          print ('Time taken for test epoch {} is {} sec\n'.format(epoch + 1, time.time()-start))
+            for image_x in train_dataset:
+                distill_train_step(image_x, original_generator)
+            print('Time taken for training epoch {} is {} sec\n'.format(
+                epoch + 1, time.time()-start))
+            start = time.time()
 
-          if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
-            distill_ckpt_save_path = distill_ckpt_manager.save()
-            print ('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                                 distill_ckpt_save_path))
+            for image_x in test_dataset:
+                distill_test_step(image_x, original_generator)
+            print('Time taken for test epoch {} is {} sec\n'.format(
+                epoch + 1, time.time()-start))
 
-          original_model_output = original_generator(image_x)
-          tiny_model_output = tiny_generator(image_x)
-          with tiny_generator_train_summary_writer.as_default():
-              tf.summary.scalar('tiny_generator_loss', tiny_generator_train_loss.result(), step=epoch)
-          with tiny_generator_test_summary_writer.as_default():
-              tf.summary.scalar('tiny_generator_loss', tiny_generator_test_loss.result(), step=epoch)
-              tf.summary.image("input X", image_x, step=epoch)
-              tf.summary.image("original output X", original_model_output, step=epoch)
-              tf.summary.image("tiny_model_output", tiny_model_output, step=epoch)
+            if (epoch + 1) % NUM_EPOCHS_TO_SAVE == 0:
+                distill_ckpt_save_path = distill_ckpt_manager.save()
+                print('Saving checkpoint for epoch {} at {}'.format(epoch+1,
+                                                                    distill_ckpt_save_path))
 
-          tiny_generator_train_loss.reset_states()
-          tiny_generator_test_loss.reset_states()
-        tiny_generator.save('./saved_model/tiny_' + distill_type + '_generator') 
+            original_model_output = original_generator(image_x)
+            tiny_model_output = tiny_generator(image_x)
+            with tiny_generator_train_summary_writer.as_default():
+                tf.summary.scalar('tiny_generator_loss',
+                                  tiny_generator_train_loss.result(), step=epoch)
+            with tiny_generator_test_summary_writer.as_default():
+                tf.summary.scalar('tiny_generator_loss',
+                                  tiny_generator_test_loss.result(), step=epoch)
+                tf.summary.image("input X", image_x, step=epoch)
+                tf.summary.image("original output X",
+                                 original_model_output, step=epoch)
+                tf.summary.image("tiny_model_output",
+                                 tiny_model_output, step=epoch)
+
+            tiny_generator_train_loss.reset_states()
+            tiny_generator_test_loss.reset_states()
+        tiny_generator.save('./saved_model/tiny_' +
+                            distill_type + '_generator')
 
         # Convert to tflite as well.
         converter = tf.lite.TFLiteConverter.from_keras_model(tiny_generator)
@@ -467,12 +534,14 @@ if __name__ == '__main__':
             original_model_output = original_generator(image_x)
             tiny_model_output = tiny_generator(image_x)
 
-            image = np.concatenate((image_x[0].numpy(), original_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
+            image = np.concatenate((image_x[0].numpy(
+            ), original_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
 
             pil_img = Image.fromarray(image)
 
-            file_name = os.path.join('./', 'output_tiny', 'tiny_compare' + str(index) + '.png')
+            file_name = os.path.join(
+                './', 'output_tiny', 'tiny_compare' + str(index) + '.png')
             pil_img.save(file_name)
 
     else:
