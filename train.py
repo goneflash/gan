@@ -320,11 +320,11 @@ def train_loop(
             tf.summary.scalar('generator_total_loss',
                               generator_f_test_total_loss.result(), step=epoch)
             tf.summary.scalar('generator_loss',
-                              generator_g_loss_test.result(), step=epoch)
+                              generator_f_loss_test.result(), step=epoch)
             tf.summary.scalar('cycle_loss',
-                              cycle_loss_y_test.result(), step=epoch)
+                              cycle_loss_x_test.result(), step=epoch)
             tf.summary.scalar('identity_loss',
-                              identity_loss_y_test.result(), step=epoch)
+                              identity_loss_x_test.result(), step=epoch)
             tf.summary.image("test input X", image_x,
                              step=epoch, max_outputs=batch_size)
             tf.summary.image("test faked Y", fake_y,

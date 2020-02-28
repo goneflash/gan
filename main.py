@@ -29,7 +29,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
-EPOCHS = 20
+EPOCHS = 100
 OUTPUT_CHANNELS = 3
 BUFFER_SIZE = 1000
 BATCH_SIZE = 4
