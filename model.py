@@ -1,7 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import tensorflow as tf
-from tensorflow_examples.models.pix2pix import pix2pix
 
 OUTPUT_CHANNELS = 3
 BASE_CHANNEL = 16
@@ -54,33 +53,33 @@ def unet_generator(base_channel, output_channels, norm_type='batchnorm'):
     """
 
     down_stack = [
-        pix2pix.downsample(base_channel * 4, 4, norm_type,
+        downsample(base_channel * 4, 4, norm_type,
                            apply_norm=False),  # (bs, 128, 128, 64)
         # (bs, 64, 64, 128)
-        pix2pix.downsample(base_channel * 8, 4, norm_type),
-        pix2pix.downsample(base_channel * 16, 4,
+        downsample(base_channel * 8, 4, norm_type),
+        downsample(base_channel * 16, 4,
                            norm_type),  # (bs, 32, 32, 256)
-        pix2pix.downsample(base_channel * 32, 4,
+        downsample(base_channel * 32, 4,
                            norm_type),  # (bs, 16, 16, 512)
-        pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 8, 8, 512)
-        pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 4, 4, 512)
-        pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 2, 2, 512)
-        pix2pix.downsample(base_channel * 32, 4, norm_type),  # (bs, 1, 1, 512)
+        downsample(base_channel * 32, 4, norm_type),  # (bs, 8, 8, 512)
+        downsample(base_channel * 32, 4, norm_type),  # (bs, 4, 4, 512)
+        downsample(base_channel * 32, 4, norm_type),  # (bs, 2, 2, 512)
+        downsample(base_channel * 32, 4, norm_type),  # (bs, 1, 1, 512)
     ]
 
     up_stack = [
-        pix2pix.upsample(base_channel * 32, 4, norm_type,
+        upsample(base_channel * 32, 4, norm_type,
                          apply_dropout=True),  # (bs, 2, 2, 1024)
-        pix2pix.upsample(base_channel * 32, 4, norm_type,
+        upsample(base_channel * 32, 4, norm_type,
                          apply_dropout=True),  # (bs, 4, 4, 1024)
-        pix2pix.upsample(base_channel * 32, 4, norm_type,
+        upsample(base_channel * 32, 4, norm_type,
                          apply_dropout=True),  # (bs, 8, 8, 1024)
         # (bs, 16, 16, 1024)
-        pix2pix.upsample(base_channel * 32, 4, norm_type),
-        pix2pix.upsample(base_channel * 16, 4, norm_type),  # (bs, 32, 32, 512)
-        pix2pix.upsample(base_channel * 8, 4, norm_type),  # (bs, 64, 64, 256)
+        upsample(base_channel * 32, 4, norm_type),
+        upsample(base_channel * 16, 4, norm_type),  # (bs, 32, 32, 512)
+        upsample(base_channel * 8, 4, norm_type),  # (bs, 64, 64, 256)
         # (bs, 128, 128, 128)
-        pix2pix.upsample(base_channel * 4, 4, norm_type),
+        upsample(base_channel * 4, 4, norm_type),
     ]
 
     initializer = tf.random_normal_initializer(0., 0.02)
@@ -133,11 +132,11 @@ def discriminator_base(base_channel, norm_type='batchnorm', target=True):
         x = tf.keras.layers.concatenate(
             [inp, tar])  # (bs, 256, 256, channels*2)
 
-    down1 = pix2pix.downsample(
+    down1 = downsample(
         base_channel * 4, 4, norm_type, False)(x)  # (bs, 128, 128, 64)
-    down2 = pix2pix.downsample(
+    down2 = downsample(
         base_channel * 8, 4, norm_type)(down1)  # (bs, 64, 64, 128)
-    down3 = pix2pix.downsample(
+    down3 = downsample(
         base_channel * 16, 4, norm_type)(down2)  # (bs, 32, 32, 256)
 
     zero_pad1 = tf.keras.layers.ZeroPadding2D()(down3)  # (bs, 34, 34, 256)
@@ -162,3 +161,64 @@ def discriminator_base(base_channel, norm_type='batchnorm', target=True):
         return tf.keras.Model(inputs=[inp, tar], outputs=last)
     else:
         return tf.keras.Model(inputs=inp, outputs=last)
+
+def upsample(filters, size, norm_type='batchnorm', apply_dropout=False):
+  """Upsamples an input.
+  Conv2DTranspose => Batchnorm => Dropout => Relu
+  Args:
+    filters: number of filters
+    size: filter size
+    norm_type: Normalization type; either 'batchnorm' or 'instancenorm'.
+    apply_dropout: If True, adds the dropout layer
+  Returns:
+    Upsample Sequential Model
+  """
+
+  initializer = tf.random_normal_initializer(0., 0.02)
+
+  result = tf.keras.Sequential()
+  result.add(
+      tf.keras.layers.Conv2DTranspose(filters, size, strides=2,
+                                      padding='same',
+                                      kernel_initializer=initializer,
+                                      use_bias=False))
+
+  if norm_type.lower() == 'batchnorm':
+    result.add(tf.keras.layers.BatchNormalization())
+  elif norm_type.lower() == 'instancenorm':
+    result.add(InstanceNormalization())
+
+  if apply_dropout:
+    result.add(tf.keras.layers.Dropout(0.5))
+
+  result.add(tf.keras.layers.ReLU())
+
+  return result
+
+def downsample(filters, size, norm_type='batchnorm', apply_norm=True):
+  """Downsamples an input.
+  Conv2D => Batchnorm => LeakyRelu
+  Args:
+    filters: number of filters
+    size: filter size
+    norm_type: Normalization type; either 'batchnorm' or 'instancenorm'.
+    apply_norm: If True, adds the batchnorm layer
+  Returns:
+    Downsample Sequential Model
+  """
+  initializer = tf.random_normal_initializer(0., 0.02)
+
+  result = tf.keras.Sequential()
+  result.add(
+      tf.keras.layers.Conv2D(filters, size, strides=2, padding='same',
+                             kernel_initializer=initializer, use_bias=False))
+
+  if apply_norm:
+    if norm_type.lower() == 'batchnorm':
+      result.add(tf.keras.layers.BatchNormalization())
+    elif norm_type.lower() == 'instancenorm':
+      result.add(InstanceNormalization())
+
+  result.add(tf.keras.layers.LeakyReLU())
+
+  return result
