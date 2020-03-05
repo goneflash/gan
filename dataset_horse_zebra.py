@@ -8,10 +8,11 @@ IMG_HEIGHT = 256
 
 
 def random_crop(image):
-    cropped_image = tf.image.random_crop(
-        image, size=[IMG_HEIGHT, IMG_WIDTH, 3])
+    cropped_image = tf.image.random_crop(image,
+                                         size=[IMG_HEIGHT, IMG_WIDTH, 3])
 
     return cropped_image
+
 
 # normalizing the images to [-1, 1]
 
@@ -48,23 +49,24 @@ def preprocess_image_test(image, label):
 
 def get_horse_zebra_dataset(batch_size, buffer_size, max_num_samples):
     dataset, metadata = tfds.load('cycle_gan/horse2zebra',
-                                  with_info=True, as_supervised=True)
+                                  with_info=True,
+                                  as_supervised=True)
     train_horses, train_zebras = dataset['trainA'], dataset['trainB']
     test_horses, test_zebras = dataset['testA'], dataset['testB']
 
-    train_horses = train_horses.map(
-        preprocess_image_train, num_parallel_calls=AUTOTUNE)
-    train_zebras = train_zebras.map(
-        preprocess_image_train, num_parallel_calls=AUTOTUNE)
+    train_horses = train_horses.map(preprocess_image_train,
+                                    num_parallel_calls=AUTOTUNE)
+    train_zebras = train_zebras.map(preprocess_image_train,
+                                    num_parallel_calls=AUTOTUNE)
     train_horses = train_horses.take(max_num_samples).cache().shuffle(
         buffer_size).batch(batch_size)
     train_zebras = train_zebras.take(max_num_samples).cache().shuffle(
         buffer_size).batch(batch_size)
 
-    test_horses = test_horses.map(
-        preprocess_image_test, num_parallel_calls=AUTOTUNE)
-    test_zebras = test_zebras.map(
-        preprocess_image_test, num_parallel_calls=AUTOTUNE)
+    test_horses = test_horses.map(preprocess_image_test,
+                                  num_parallel_calls=AUTOTUNE)
+    test_zebras = test_zebras.map(preprocess_image_test,
+                                  num_parallel_calls=AUTOTUNE)
     test_horses = test_horses.take(max_num_samples).cache().shuffle(
         buffer_size).batch(batch_size)
     test_zebras = test_zebras.take(max_num_samples).cache().shuffle(

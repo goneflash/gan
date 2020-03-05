@@ -37,12 +37,16 @@ MAX_NUM_SAMPLES = 50
 NUM_SAMPLES_FOR_PREDICT = 50
 MAX_CKPT_TO_SAVE = 10
 NUM_EPOCHS_TO_SAVE = 5
-
+# 512 must use batch size <= 2
+IMG_WIDTH = 256
+IMG_HEIGHT = 256
 
 if __name__ == '__main__':
     try:
-        optional_arguments = ['mode=', 'dataset_path=', 'ckpt_path=',
-                              'dataset_name=', 'distill_type=', 'batch_size=', 'max_num_samples=']
+        optional_arguments = [
+            'mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=',
+            'distill_type=', 'batch_size=', 'max_num_samples='
+        ]
         opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
         sys.exit('Usage: main.py --mode=<mode>')
@@ -58,7 +62,9 @@ if __name__ == '__main__':
     for opt, arg in opts:
         if opt in ("-m", "--mode"):
             mode = arg
-            if mode not in ['train', 'predict', 'distill', 'distill_prediction']:
+            if mode not in [
+                    'train', 'predict', 'distill', 'distill_prediction'
+            ]:
                 exit('Wrong mode: {}'.format(mode))
         if opt == '--ckpt_path':
             checkpoint_path = arg
@@ -80,17 +86,27 @@ if __name__ == '__main__':
     print('Max num samples is: {}'.format(max_num_samples))
     print('*********************************************')
 
+    img_width = IMG_WIDTH
+    img_height = IMG_HEIGHT
+
     if dataset_name == 'gender':
         train_x, train_y, test_x, test_y = get_male_female_dataset(
-            batch_size, BUFFER_SIZE, max_num_samples, dataset_path, skip_small_images=False, cache=False)
+            img_width,
+            img_height,
+            batch_size,
+            BUFFER_SIZE,
+            max_num_samples,
+            dataset_path,
+            skip_small_images=False,
+            cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
             batch_size, BUFFER_SIZE, max_num_samples)
 
-    generator_g = generator()
-    generator_f = generator()
-    discriminator_y = discriminator()
-    discriminator_x = discriminator()
+    generator_g = generator(img_width=img_width, img_height=img_height)
+    generator_f = generator(img_width=img_width, img_height=img_height)
+    discriminator_y = discriminator(img_width=img_width, img_height=img_height)
+    discriminator_x = discriminator(img_width=img_width, img_height=img_height)
 
     print('Generator:')
     print(generator_g.summary())
@@ -103,21 +119,23 @@ if __name__ == '__main__':
     discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
-    ckpt = tf.train.Checkpoint(generator_g=generator_g,
-                               generator_f=generator_f,
-                               discriminator_x=discriminator_x,
-                               discriminator_y=discriminator_y,
-                               generator_g_optimizer=generator_g_optimizer,
-                               generator_f_optimizer=generator_f_optimizer,
-                               discriminator_x_optimizer=discriminator_x_optimizer,
-                               discriminator_y_optimizer=discriminator_y_optimizer)
+    ckpt = tf.train.Checkpoint(
+        generator_g=generator_g,
+        generator_f=generator_f,
+        discriminator_x=discriminator_x,
+        discriminator_y=discriminator_y,
+        generator_g_optimizer=generator_g_optimizer,
+        generator_f_optimizer=generator_f_optimizer,
+        discriminator_x_optimizer=discriminator_x_optimizer,
+        discriminator_y_optimizer=discriminator_y_optimizer)
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     if mode == 'train':
         if checkpoint_path == None:
             checkpoint_path = os.path.join('checkpoints', current_time)
-        ckpt_manager = tf.train.CheckpointManager(
-            ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        ckpt_manager = tf.train.CheckpointManager(ckpt,
+                                                  checkpoint_path,
+                                                  max_to_keep=MAX_CKPT_TO_SAVE)
 
         # if a checkpoint exists, restore the latest checkpoint.
         if ckpt_manager.latest_checkpoint:
@@ -125,29 +143,29 @@ if __name__ == '__main__':
             print('Latest checkpoint restored: {}!!'.format(
                 ckpt_manager.latest_checkpoint))
 
-        train_loop(
-            train_x,
-            train_y,
-            test_x,
-            test_y,
-            generator_g,
-            generator_f,
-            discriminator_x,
-            discriminator_y,
-            generator_g_optimizer,
-            generator_f_optimizer,
-            discriminator_x_optimizer,
-            discriminator_y_optimizer,
-            ckpt_manager,
-            batch_size=batch_size,
-            epochs=EPOCHS,
-            num_epochs_to_save=NUM_EPOCHS_TO_SAVE)
+        train_loop(train_x,
+                   train_y,
+                   test_x,
+                   test_y,
+                   generator_g,
+                   generator_f,
+                   discriminator_x,
+                   discriminator_y,
+                   generator_g_optimizer,
+                   generator_f_optimizer,
+                   discriminator_x_optimizer,
+                   discriminator_y_optimizer,
+                   ckpt_manager,
+                   batch_size=batch_size,
+                   epochs=EPOCHS,
+                   num_epochs_to_save=NUM_EPOCHS_TO_SAVE)
 
     elif mode == 'predict':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
-        ckpt_manager = tf.train.CheckpointManager(
-            ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        ckpt_manager = tf.train.CheckpointManager(ckpt,
+                                                  checkpoint_path,
+                                                  max_to_keep=MAX_CKPT_TO_SAVE)
         if not ckpt_manager.latest_checkpoint:
             exit('Error: ckpt not exist for predict')
 
@@ -164,8 +182,8 @@ if __name__ == '__main__':
                 image = ((image + 1.0) * 127.5).astype(np.uint8)
 
                 pil_img = Image.fromarray(image)
-                file_name = os.path.join(
-                    './', 'output', 'fake_image_y' + str(index) + '.png')
+                file_name = os.path.join('./', 'output',
+                                         'fake_image_y' + str(index) + '.png')
                 pil_img.save(file_name)
                 index += 1
 
@@ -178,16 +196,17 @@ if __name__ == '__main__':
                 image = ((image + 1.0) * 127.5).astype(np.uint8)
 
                 pil_img = Image.fromarray(image)
-                file_name = os.path.join(
-                    './', 'output', 'fake_image_x' + str(index) + '.png')
+                file_name = os.path.join('./', 'output',
+                                         'fake_image_x' + str(index) + '.png')
                 pil_img.save(file_name)
                 index += 1
 
     elif mode == 'distill':
         if checkpoint_path == None:
             exit('Error: Please specify checkpoint path')
-        ckpt_manager = tf.train.CheckpointManager(
-            ckpt, checkpoint_path, max_to_keep=MAX_CKPT_TO_SAVE)
+        ckpt_manager = tf.train.CheckpointManager(ckpt,
+                                                  checkpoint_path,
+                                                  max_to_keep=MAX_CKPT_TO_SAVE)
         if not ckpt_manager.latest_checkpoint:
             exit('Error: ckpt not exist for predict')
 
@@ -199,9 +218,8 @@ if __name__ == '__main__':
         tiny_generator.summary()
 
         distill_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-        distill_ckpt = tf.train.Checkpoint(
-            tiny_generator=tiny_generator,
-            distill_optimizer=distill_optimizer)
+        distill_ckpt = tf.train.Checkpoint(tiny_generator=tiny_generator,
+                                           distill_optimizer=distill_optimizer)
 
         distill_ckpt_path = os.path.join('checkpoints_distill', current_time)
         distill_ckpt_manager = tf.train.CheckpointManager(
@@ -218,16 +236,15 @@ if __name__ == '__main__':
         else:
             exit('Error: Unknown distill type')
 
-        distill_loop(
-            train_dataset,
-            test_dataset,
-            tiny_generator,
-            original_generator,
-            distill_optimizer,
-            distill_ckpt_manager,
-            batch_size=batch_size,
-            epochs=EPOCHS,
-            num_epochs_to_save=NUM_EPOCHS_TO_SAVE)
+        distill_loop(train_dataset,
+                     test_dataset,
+                     tiny_generator,
+                     original_generator,
+                     distill_optimizer,
+                     distill_ckpt_manager,
+                     batch_size=batch_size,
+                     epochs=EPOCHS,
+                     num_epochs_to_save=NUM_EPOCHS_TO_SAVE)
 
         # Convert to tflite as well.
         converter = tf.lite.TFLiteConverter.from_keras_model(tiny_generator)
@@ -235,18 +252,21 @@ if __name__ == '__main__':
         open('tflite/' + distill_type + '.tflite', "wb").write(tflite_model)
 
         # Also make some predictions
-        for index, image_x in enumerate(test_dataset.take(NUM_SAMPLES_FOR_PREDICT)):
+        for index, image_x in enumerate(
+                test_dataset.take(NUM_SAMPLES_FOR_PREDICT)):
             original_model_output = original_generator(image_x)
             tiny_model_output = tiny_generator(image_x)
 
-            image = np.concatenate((image_x[0].numpy(
-            ), original_model_output[0].numpy(), tiny_model_output[0].numpy()), axis=1)
+            image = np.concatenate(
+                (image_x[0].numpy(), original_model_output[0].numpy(),
+                 tiny_model_output[0].numpy()),
+                axis=1)
             image = ((image + 1.0) * 127.5).astype(np.uint8)
 
             pil_img = Image.fromarray(image)
 
-            file_name = os.path.join(
-                './', 'output_tiny', 'tiny_compare' + str(index) + '.png')
+            file_name = os.path.join('./', 'output_tiny',
+                                     'tiny_compare' + str(index) + '.png')
             pil_img.save(file_name)
 
     else:

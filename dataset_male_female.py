@@ -10,8 +10,6 @@ AUTOTUNE = tf.data.experimental.AUTOTUNE
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
 CROP_AUG_RATIO = 0.1
-AUG_IMG_WIDTH = int(IMG_WIDTH * (1.0 + CROP_AUG_RATIO))
-AUG_IMG_HEIGHT = int(IMG_HEIGHT * (1.0 + CROP_AUG_RATIO))
 
 
 def parse_image_attrs(attrs_file_path):
@@ -52,20 +50,25 @@ def decode_img(img):
     return img
 
 
-def random_crop(img):
-    img = tf.image.resize_with_pad(
-        img, AUG_IMG_HEIGHT, AUG_IMG_WIDTH, method=tf.image.ResizeMethod.BILINEAR)
+def random_crop(img, output_img_width, output_img_height):
+    aug_img_width = int(output_img_width * (1.0 + CROP_AUG_RATIO))
+    aug_img_height = int(output_img_height * (1.0 + CROP_AUG_RATIO))
+    img = tf.image.resize_with_pad(img,
+                                   aug_img_height,
+                                   aug_img_width,
+                                   method=tf.image.ResizeMethod.BILINEAR)
     # Random crop image.
-    img = tf.image.random_crop(img, size=[IMG_HEIGHT, IMG_WIDTH, 3])
+    img = tf.image.random_crop(img,
+                               size=[output_img_height, output_img_width, 3])
     return img
 
 
-def load_image(image_path):
+def load_image(image_path, output_img_width, output_img_height):
     # load the raw data from the file as a string
     img = tf.io.read_file(image_path)
     img = decode_img(img)
 
-    img = random_crop(img)
+    img = random_crop(img, output_img_width, output_img_height)
     # img = tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT], method=tf.image.ResizeMethod.BILINEAR)
     # img = tf.image.random_brightness(img, max_delta=0.1)
     # img = tf.clip_by_value(img, 0.0, 1.0)
@@ -76,16 +79,27 @@ def load_image(image_path):
     return img
 
 
-def load_dataset(image_paths, max_num_samples, train_split, buffer_size, batch_size, cache=False):
+def load_dataset(image_paths,
+                 img_width,
+                 img_height,
+                 max_num_samples,
+                 train_split,
+                 buffer_size,
+                 batch_size,
+                 cache=False):
     num_samples = min(max_num_samples, len(image_paths))
     train_range = int(num_samples * train_split)
 
     train_ds = tf.data.Dataset.from_tensor_slices(image_paths[0:train_range])
-    train_ds = train_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+    train_ds = train_ds.map(
+        lambda img_path: load_image(img_path, img_width, img_height),
+        num_parallel_calls=AUTOTUNE)
 
     test_ds = tf.data.Dataset.from_tensor_slices(
         image_paths[train_range:num_samples])
-    test_ds = test_ds.map(load_image, num_parallel_calls=AUTOTUNE)
+    test_ds = test_ds.map(
+        lambda img_path: load_image(img_path, img_width, img_height),
+        num_parallel_calls=AUTOTUNE)
 
     if cache:
         train_ds = train_ds.cache()
@@ -96,14 +110,15 @@ def load_dataset(image_paths, max_num_samples, train_split, buffer_size, batch_s
     return train_ds, test_ds
 
 
-def get_male_female_dataset(
-        batch_size,
-        buffer_size,
-        max_num_samples,
-        dataset_path,
-        train_split=0.8,
-        skip_small_images=False,
-        cache=False):
+def get_male_female_dataset(img_width,
+                            img_height,
+                            batch_size,
+                            buffer_size,
+                            max_num_samples,
+                            dataset_path,
+                            train_split=0.8,
+                            skip_small_images=False,
+                            cache=False):
     male_images = []
     female_images = []
     attrs_file_path = os.path.join(dataset_path, 'list_attr_celeba.txt')
@@ -131,13 +146,17 @@ def get_male_female_dataset(
         elif example['Male'] == '-1':
             female_images.append(image_path)
 
-    print('Time taken for metadata is {} sec\n'.format(time.time()-start))
+    print('Time taken for metadata is {} sec\n'.format(time.time() - start))
     print('Available male size {}'.format(len(male_images)))
     print('Available female size {}'.format(len(female_images)))
 
-    male_train_ds, male_test_ds = load_dataset(
-        male_images, max_num_samples, train_split, buffer_size, batch_size)
-    female_train_ds, female_test_ds = load_dataset(
-        female_images, max_num_samples, train_split, buffer_size, batch_size)
+    male_train_ds, male_test_ds = load_dataset(male_images, img_width,
+                                               img_height, max_num_samples,
+                                               train_split, buffer_size,
+                                               batch_size)
+    female_train_ds, female_test_ds = load_dataset(female_images, img_width,
+                                                   img_height, max_num_samples,
+                                                   train_split, buffer_size,
+                                                   batch_size)
 
     return male_train_ds, female_train_ds, male_test_ds, female_test_ds
