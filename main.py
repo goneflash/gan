@@ -10,7 +10,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import tensorflow as tf
-import tensorflow_datasets as tfds
 from model import generator, discriminator
 from dataset_horse_zebra import get_horse_zebra_dataset
 from dataset_male_female import get_male_female_dataset
