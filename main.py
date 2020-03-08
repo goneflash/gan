@@ -1,11 +1,16 @@
 # Usage:
-#  python main.py --mode=train --dataset_path=/home/fan/dataset/celeb_img_align
+#  python main.py --mode=train --dataset_path=/home/fan/dataset/celeb_img_align/img_align_celeba \
+#        --batch_size=2 --max_num_samples=10
+#  python main.py --mode=train \
+#        --dataset_a_path=/home/fan/dataset/faceswap/mingli/filtered/ \
+#        --dataset_b_path=/home/fan/dataset/faceswap/mitsushima_hikari/filtered/ \
+#        --batch_size=2 --max_num_samples=10 --dataset_name=faceswap
 #
 #  python main.py --mode=predict \
-#        --dataset_path=/home/fan/dataset/celeb_img_align --ckpt_path=./checkpoints/saved_ckpt
+#        --dataset_path=/home/fan/dataset/celeb_img_align/img_align_celeba --ckpt_path=./checkpoints/saved_ckpt
 #
 #  python main.py --mode=distill \
-#        --dataset_path=/home/fan/dataset/celeb_img_align --ckpt_path=./checkpoints/saved_ckpt
+#        --dataset_path=/home/fan/dataset/celeb_img_align/img_align_celeba --ckpt_path=./checkpoints/saved_ckpt
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -13,6 +18,7 @@ import tensorflow as tf
 from model import generator, discriminator
 from dataset_horse_zebra import get_horse_zebra_dataset
 from dataset_male_female import get_male_female_dataset
+from dataset_face_swap import get_face_swap_dataset
 from train import train_loop
 from distill import distill_loop
 
@@ -44,7 +50,8 @@ if __name__ == '__main__':
     try:
         optional_arguments = [
             'mode=', 'dataset_path=', 'ckpt_path=', 'dataset_name=',
-            'distill_type=', 'batch_size=', 'max_num_samples='
+            'distill_type=', 'batch_size=', 'max_num_samples=',
+            'dataset_a_path=', 'dataset_b_path='
         ]
         opts, args = getopt.getopt(sys.argv[1:], '', optional_arguments)
     except getopt.GetoptError:
@@ -58,6 +65,9 @@ if __name__ == '__main__':
     batch_size = BATCH_SIZE
     max_num_samples = MAX_NUM_SAMPLES
 
+    dataset_a_path = None
+    dataset_b_path = None
+
     for opt, arg in opts:
         if opt in ("-m", "--mode"):
             mode = arg
@@ -69,6 +79,10 @@ if __name__ == '__main__':
             checkpoint_path = arg
         if opt == '--dataset_path':
             dataset_path = arg
+        if opt == '--dataset_a_path':
+            dataset_a_path = arg
+        if opt == '--dataset_b_path':
+            dataset_b_path = arg
         if opt == '--dataset_name':
             dataset_name = arg
         if opt == '--distill_type':
@@ -98,9 +112,24 @@ if __name__ == '__main__':
             dataset_path,
             skip_small_images=False,
             cache=False)
+    elif dataset_name == 'faceswap':
+        assert dataset_a_path is not None, 'Must specify both dataset path for faceswap'
+        assert dataset_b_path is not None, 'Must specify both dataset path for faceswap'
+        train_x, train_y, test_x, test_y = get_face_swap_dataset(
+            img_width,
+            img_height,
+            batch_size,
+            BUFFER_SIZE,
+            max_num_samples,
+            dataset_a_path,
+            dataset_b_path,
+            skip_small_images=False,
+            cache=False)
     elif dataset_name == 'horse':
         train_x, train_y, test_x, test_y = get_horse_zebra_dataset(
             batch_size, BUFFER_SIZE, max_num_samples)
+    else:
+        exit('Error: Unknown dataset name')
 
     generator_g = generator(img_width=img_width, img_height=img_height)
     generator_f = generator(img_width=img_width, img_height=img_height)

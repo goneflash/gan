@@ -131,7 +131,7 @@ def get_male_female_dataset(img_width,
         if example['Blurry'] == '1' or example['Wearing_Hat'] == '1':
             continue
         # Skip non-exist examples
-        image_path = os.path.join(dataset_path, 'img_align_celeba', image_name)
+        image_path = os.path.join(dataset_path, image_name)
         if not os.path.exists(image_path):
             continue
 
