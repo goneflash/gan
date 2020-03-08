@@ -9,7 +9,8 @@ from PIL import Image
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
-CROP_AUG_RATIO = 0.1
+CROP_AUG_RATIO = 0.2
+PADDING_AUG_RATIO = 0.5
 
 
 def parse_image_attrs(attrs_file_path):
@@ -51,12 +52,25 @@ def decode_img(img):
 
 
 def random_crop(img, output_img_width, output_img_height):
-    aug_img_width = int(output_img_width * (1.0 + CROP_AUG_RATIO))
-    aug_img_height = int(output_img_height * (1.0 + CROP_AUG_RATIO))
-    img = tf.image.resize_with_pad(img,
-                                   aug_img_height,
-                                   aug_img_width,
-                                   method=tf.image.ResizeMethod.BILINEAR)
+    # First resize to not too large image
+    img = tf.image.resize(img, [output_img_width, output_img_width],
+                          method=tf.image.ResizeMethod.BILINEAR,
+                          preserve_aspect_ratio=True,
+                          antialias=True)
+    # First padding on the image make the face randomly smaller.
+    padded_size = tf.random.uniform([],
+                                    minval=0,
+                                    maxval=int(output_img_width *
+                                               PADDING_AUG_RATIO / 2),
+                                    dtype=tf.int32)
+    img = tf.image.pad_to_bounding_box(img, padded_size, padded_size,
+                                       output_img_height + padded_size * 2,
+                                       output_img_width + padded_size * 2)
+    # Resize down to avoid cut on the face.
+    crop_size = int(output_img_width * (1 + CROP_AUG_RATIO))
+    img = tf.image.resize(img, [crop_size, crop_size],
+                          method=tf.image.ResizeMethod.BILINEAR,
+                          antialias=True)
     # Random crop image.
     img = tf.image.random_crop(img,
                                size=[output_img_height, output_img_width, 3])
@@ -106,7 +120,8 @@ def load_dataset(image_paths,
         test_ds = test_ds.cache()
 
     train_ds = train_ds.shuffle(buffer_size).batch(batch_size)
-    test_ds = test_ds.shuffle(buffer_size).batch(batch_size)
+    # Don't shuffle for test
+    test_ds = test_ds.batch(batch_size)
     return train_ds, test_ds
 
 
