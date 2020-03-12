@@ -143,7 +143,6 @@ if __name__ == '__main__':
 
     generator_g_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     generator_f_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-
     discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 

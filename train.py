@@ -261,11 +261,11 @@ def train_loop(train_x,
                               identity_loss_x_train.result(),
                               step=epoch)
             tf.summary.image("train input X",
-                             image_x,
+                             ((image_x + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
             tf.summary.image("train faked Y",
-                             fake_y,
+                             ((fake_y + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
         with generator_g_train_summary_writer.as_default():
@@ -282,11 +282,11 @@ def train_loop(train_x,
                               identity_loss_y_train.result(),
                               step=epoch)
             tf.summary.image("train input Y",
-                             image_y,
+                             ((image_y + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
             tf.summary.image("train faked X",
-                             fake_x,
+                             ((fake_x + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
         with discriminator_y_train_summary_writer.as_default():
@@ -324,11 +324,11 @@ def train_loop(train_x,
                               identity_loss_x_test.result(),
                               step=epoch)
             tf.summary.image("test input X",
-                             image_x,
+                             ((image_x + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
             tf.summary.image("test faked Y",
-                             fake_y,
+                             ((fake_y + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
         with generator_g_test_summary_writer.as_default():
@@ -345,11 +345,11 @@ def train_loop(train_x,
                               identity_loss_y_test.result(),
                               step=epoch)
             tf.summary.image("test input Y",
-                             image_y,
+                             ((image_y + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
             tf.summary.image("test faked X",
-                             fake_x,
+                             ((fake_x + 1.0) * 0.5),
                              step=epoch,
                              max_outputs=batch_size)
         with discriminator_y_test_summary_writer.as_default():
